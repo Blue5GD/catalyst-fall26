@@ -4,14 +4,15 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(16);
 
--- The sign-up trigger creates a participants row for each of these.
+-- The sign-up trigger creates a participants row for each of these. Names and
+-- emails are unusual so they can't clash with accounts already in the database.
 insert into auth.users (id, email, raw_user_meta_data) values
-  ('00000000-0000-0000-0000-00000000000a', 'lead@yale.edu', '{"name":"Lea Lead","netid":"ll1"}'),
-  ('00000000-0000-0000-0000-00000000000b', 'maya@yale.edu', '{"name":"Maya Chen","netid":"mc1"}'),
-  ('00000000-0000-0000-0000-00000000000c', 'sam@yale.edu', '{"name":"Sam Okafor","netid":"so1"}'),
-  ('00000000-0000-0000-0000-00000000000d', 'gone@yale.edu', '{"name":"Gone Person","netid":"gp1"}');
-update public.participants set role = 'admin' where netid = 'll1';
-update public.participants set active = false where netid = 'gp1';
+  ('00000000-0000-0000-0000-00000000000a', 'pgtap-lead@yale.edu', '{"name":"Pgtap Lead","netid":"zzlead"}'),
+  ('00000000-0000-0000-0000-00000000000b', 'pgtap-maya@yale.edu', '{"name":"Pgtap Maya","netid":"zzmaya"}'),
+  ('00000000-0000-0000-0000-00000000000c', 'pgtap-sam@yale.edu', '{"name":"Pgtap Sam","netid":"zzsam"}'),
+  ('00000000-0000-0000-0000-00000000000d', 'pgtap-gone@yale.edu', '{"name":"Pgtap Gone","netid":"zzgone"}');
+update public.participants set role = 'admin' where netid = 'zzlead';
+update public.participants set active = false where netid = 'zzgone';
 
 -- Act as a signed-in user for the rest of the transaction.
 create function pg_temp.act_as(uid uuid) returns void language sql as $$
@@ -38,7 +39,7 @@ select throws_ok(
   'private.is_admin is not callable over the API'
 );
 select is(
-  (select role from public.participants where netid = 'mc1'),
+  (select role from public.participants where netid = 'zzmaya'),
   'participant',
   'a signed-in user can read role'
 );
@@ -87,7 +88,7 @@ select is(
   'an admin can read anyone''s history'
 );
 select is(
-  (select count(*)::integer from public.recent_point_entries(50)),
+  (select count(*)::integer from public.recent_point_entries(50) where netid in ('zzmaya', 'zzsam')),
   2,
   'an admin can read the recent log'
 );
@@ -96,7 +97,7 @@ select is(
 reset role;
 select is(
   (select count(*)::integer from public.point_entries
-    where created_by = 'Lea Lead' and reason = 'Won the design challenge' and amount = 3 and source_type = 'award'),
+    where created_by = 'Pgtap Lead' and reason = 'Won the design challenge' and amount = 3 and source_type = 'award'),
   2,
   'created_by is set by the database and the reason is trimmed'
 );
