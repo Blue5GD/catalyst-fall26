@@ -1,0 +1,147 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { safeNext } from '../lib/auth';
+
+export const prerender = false;
+
+// Shown once, right after sign-up. Types two lines, then moves on to `next`.
+const next = safeNext(Astro.url.searchParams.get('next'));
+---
+
+<BaseLayout title="Welcome" bare>
+  <main class="welcome" data-welcome data-next={next}>
+    <h1 class="visually-hidden">Welcome to y/cs. Welcome to Catalyst.</h1>
+    <p class="line" aria-hidden="true" hidden data-line>
+      <span data-text></span><span class="caret" data-caret></span>
+    </p>
+    <noscript>
+      <p class="line">welcome to catalyst.</p>
+    </noscript>
+    <a class="skip label" href={next} data-skip>Skip</a>
+  </main>
+</BaseLayout>
+
+<script>
+  const LINES = ['welcome to y/cs.', 'welcome to catalyst.'];
+
+  const root = document.querySelector<HTMLElement>('[data-welcome]')!;
+  const text = root.querySelector<HTMLElement>('[data-text]')!;
+  const caret = root.querySelector<HTMLElement>('[data-caret]')!;
+  root.querySelector<HTMLElement>('[data-line]')!.hidden = false;
+  const next = root.dataset.next || '/';
+
+  let done = false;
+  const leave = () => {
+    if (done) return;
+    done = true;
+    // replace, so Back doesn't play it again.
+    location.replace(next);
+  };
+
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // A little unevenness reads as typing rather than a ticker.
+  const typeLine = async (line: string) => {
+    caret.classList.add('typing');
+    for (const char of line) {
+      if (done) return;
+      text.textContent += char;
+      await wait(char === ' ' ? 140 : 70 + Math.random() * 60);
+    }
+    caret.classList.remove('typing');
+  };
+
+  const play = async () => {
+    await wait(600);
+    await typeLine(LINES[0]);
+    await wait(1200);
+
+    // Cut to black.
+    text.textContent = '';
+    caret.hidden = true;
+    await wait(350);
+    caret.hidden = false;
+
+    await typeLine(LINES[1]);
+    await wait(1800);
+    root.classList.add('out');
+    await wait(500);
+    leave();
+  };
+
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    text.textContent = LINES[1];
+    setTimeout(leave, 2000);
+  } else {
+    play();
+  }
+
+  root.querySelector('[data-skip]')!.addEventListener('click', (event) => {
+    event.preventDefault();
+    leave();
+  });
+</script>
+
+<style>
+  .welcome {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding-inline: var(--gutter);
+    background: var(--color-bg);
+    transition: opacity 500ms ease-in;
+  }
+  .welcome.out {
+    opacity: 0;
+  }
+
+  .line {
+    max-width: none;
+    margin: 0;
+    color: var(--color-text);
+    font-size: clamp(30px, 10vw, 112px);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    white-space: nowrap;
+  }
+
+  /* The one accent on the screen. It blinks while waiting, and holds steady while typing. */
+  .caret {
+    display: inline-block;
+    width: 0.08em;
+    height: 0.85em;
+    margin-left: 0.06em;
+    vertical-align: -0.05em;
+    background: var(--color-accent);
+    animation: blink 1s steps(1) infinite;
+  }
+  .caret.typing {
+    animation: none;
+  }
+  .caret[hidden] {
+    display: none;
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  .skip {
+    position: fixed;
+    right: var(--gutter);
+    bottom: var(--space-5);
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding-inline: var(--space-2);
+    color: var(--color-text-muted);
+    text-decoration: none;
+    transition: color 150ms ease-out;
+  }
+  .skip:hover {
+    color: var(--color-text);
+  }
+</style>

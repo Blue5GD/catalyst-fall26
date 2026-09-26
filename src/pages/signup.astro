@@ -58,7 +58,7 @@ if (Astro.request.method === 'POST') {
         errors.form = 'Something went wrong creating your account. Try again, or ask a lead for help.';
       }
     } else if (data.session) {
-      return Astro.redirect(next);
+      return Astro.redirect(`/welcome?next=${encodeURIComponent(next)}`);
     } else {
       checkEmail = true;
     }

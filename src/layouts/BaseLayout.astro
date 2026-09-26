@@ -5,9 +5,11 @@ import '../styles/global.css';
 interface Props {
   title: string;
   description?: string;
+  /** No header or footer, for full-screen moments like /welcome. */
+  bare?: boolean;
 }
 
-const { title, description = 'y/cs Catalyst' } = Astro.props;
+const { title, description = 'y/cs Catalyst', bare = false } = Astro.props;
 const pageTitle = title === 'Catalyst' ? 'Catalyst · y/cs' : `${title} · Catalyst`;
 
 const nav = [
@@ -35,31 +37,39 @@ const path = Astro.url.pathname.replace(/\/$/, '') || '/';
     <title>{pageTitle}</title>
   </head>
   <body>
-    <header class="site-header container">
-      <a href="/" class="brand">
-        <img src="/ycs-logo.png" alt="y/cs" width="52" height="24" />
-        <span class="label">Catalyst</span>
-      </a>
-      <nav aria-label="Main">
-        {
-          nav.map((item) => (
-            <a href={item.href} aria-current={path === item.href ? 'page' : undefined}>
-              {item.label}
+    {
+      bare ? (
+        <slot />
+      ) : (
+        <Fragment>
+          <header class="site-header container">
+            <a href="/" class="brand">
+              <img src="/ycs-logo.png" alt="y/cs" width="52" height="24" />
+              <span class="label">Catalyst</span>
             </a>
-          ))
-        }
-        <AuthNav server:defer />
-      </nav>
-    </header>
+            <nav aria-label="Main">
+              {
+                nav.map((item) => (
+                  <a href={item.href} aria-current={path === item.href ? 'page' : undefined}>
+                    {item.label}
+                  </a>
+                ))
+              }
+              <AuthNav server:defer />
+            </nav>
+          </header>
 
-    <main class="container">
-      <slot />
-    </main>
+          <main class="container">
+            <slot />
+          </main>
 
-    <footer class="site-footer container">
-      <img src="/ycs-logo.png" alt="y/cs" width="36" height="16" />
-      <span class="label footer-label">Catalyst · Fall 2026</span>
-    </footer>
+          <footer class="site-footer container">
+            <img src="/ycs-logo.png" alt="y/cs" width="36" height="16" />
+            <span class="label footer-label">Catalyst · Fall 2026</span>
+          </footer>
+        </Fragment>
+      )
+    }
   </body>
 </html>
 

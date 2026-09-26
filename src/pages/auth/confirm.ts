@@ -25,5 +25,8 @@ export const GET: APIRoute = async ({ url, locals, redirect }) => {
     console.error('Email confirmation failed:', error.message);
     return redirect('/signin?confirm=failed', 303);
   }
-  return redirect('/', 303);
+  // A confirmed sign-up gets the welcome screen. The ?code= link is only sent
+  // for sign-ups, since there's no password reset page yet.
+  const isSignup = tokenHash ? type === 'signup' : Boolean(code);
+  return redirect(isSignup ? '/welcome' : '/', 303);
 };
