@@ -1,0 +1,86 @@
+---
+// Points history table, used on /me, /admin and /admin/people/<netid>.
+import { formatDate, formatPoints, type PointRow, type RecentRow } from '../lib/points-form';
+
+interface Props {
+  rows: PointRow[] | RecentRow[];
+  /** Adds a Who column. Rows must be RecentRow. */
+  showWho?: boolean;
+  /** Adds a By column (who awarded it). Admins only. */
+  showBy?: boolean;
+  /** Participant id for Correct links on a one-person table. */
+  correctFor?: string;
+}
+
+const { rows, showWho = false, showBy = false, correctFor } = Astro.props;
+const showCorrect = showWho || Boolean(correctFor);
+const correctHref = (row: PointRow | RecentRow) => {
+  const who = 'participant_id' in row ? row.participant_id : correctFor;
+  return `/admin?correct=${row.id}&who=${who}#award`;
+};
+---
+
+<div class="table-scroll">
+  <table class="table points-table">
+    <thead>
+      <tr>
+        <th scope="col">When</th>
+        {showWho && <th scope="col">Who</th>}
+        <th scope="col">Reason</th>
+        {showBy && <th scope="col">By</th>}
+        <th scope="col" class="num">Points</th>
+        {showCorrect && <th scope="col"><span class="visually-hidden">Actions</span></th>}
+      </tr>
+    </thead>
+    <tbody>
+      {
+        rows.map((row) => (
+          <tr>
+            <td class="num when">{formatDate(row.created_at, showBy)}</td>
+            {showWho && 'netid' in row && (
+              <td>
+                <a href={`/admin/people/${row.netid}`}>{row.name}</a>
+              </td>
+            )}
+            <td class="reason">{row.reason}</td>
+            {showBy && <td class="by">{row.created_by ?? '—'}</td>}
+            <td class:list={['num', row.amount < 0 ? 'neg' : 'pos']}>{formatPoints(row.amount)}</td>
+            {showCorrect && (
+              <td class="action">
+                <a href={correctHref(row)}>Correct</a>
+              </td>
+            )}
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .when {
+    white-space: nowrap;
+    color: var(--color-text-muted);
+    text-align: left;
+  }
+  .reason {
+    min-width: 200px;
+  }
+  .by {
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+  }
+  .neg {
+    color: var(--color-text-secondary);
+  }
+  .action {
+    white-space: nowrap;
+    text-align: right;
+  }
+  .action a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    font-size: var(--text-small);
+  }
+</style>

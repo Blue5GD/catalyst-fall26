@@ -64,6 +64,7 @@ const path = Astro.url.pathname.replace(/\/$/, '') || '/';
 <style>
   .site-header {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     gap: var(--space-4);
@@ -85,6 +86,7 @@ const path = Astro.url.pathname.replace(/\/$/, '') || '/';
 
   nav {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-5);
   }
