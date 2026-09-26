@@ -61,8 +61,6 @@ If the site is down, add a row in **Table Editor → point_entries → Insert �
 
 Leave `id` and `created_at` empty. They fill themselves in.
 
-**Don't record reward spending as a negative entry.** The leaderboard ranks by the sum of these rows, so spending would lower someone's rank. Rewards get their own table in Phase 2 (PRD P-5). Until then, track redemptions separately.
-
 ## Accounts
 
 Participants create their own accounts at `/signup` with their name, NetID, Yale email and a password. The NetID isn't verified.
