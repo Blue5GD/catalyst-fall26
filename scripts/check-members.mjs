@@ -57,7 +57,7 @@ for (const file of files) {
 for (const [netid, file] of profiles) {
   const text = await readFile(path.join(DIR, file), 'utf8');
   if (text.startsWith('\uFEFF')) {
-    fail(file, 'the file starts with an invisible "BOM" character. In VS Code, click "UTF-8 with BOM" in the bottom bar, choose "Save with Encoding", then "UTF-8".');
+    fail(file, 'the file starts with an invisible "BOM" character. In Cursor (or VS Code), click "UTF-8 with BOM" in the bottom bar, choose "Save with Encoding", then "UTF-8".');
     continue;
   }
   let data;

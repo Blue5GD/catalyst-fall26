@@ -41,7 +41,7 @@ You need three things. If you set these up in the first workshop, skip ahead.
    ```
 
    If you see a version number, you're set. If not, install Git from [git-scm.com](https://git-scm.com/downloads) and open a new terminal.
-3. **A code editor.** We use [VS Code](https://code.visualstudio.com).
+3. **Cursor**, the code editor we use. Download it from [cursor.com](https://cursor.com/download), install it, and sign in when it asks. The free plan is enough. If you already use VS Code, Cursor looks and works the same way.
 
 If you've never used Git on this computer, tell it who you are. Use the email on your GitHub account:
 
@@ -67,7 +67,7 @@ git clone https://github.com/YOUR-USERNAME/catalyst-fall26.git
 cd catalyst-fall26
 ```
 
-This downloads your fork into a new `catalyst-fall26` folder and moves you into it. Open that folder in VS Code (**File → Open Folder**).
+This downloads your fork into a new `catalyst-fall26` folder and moves you into it. Open that folder in Cursor (**File → Open Folder**).
 
 ### 3. Make a branch
 
@@ -85,7 +85,7 @@ You should see `Switched to a new branch 'add-ab123'`.
    cp members/_template.json members/ab123.json
    ```
 
-2. Open `members/ab123.json` in VS Code and fill it in:
+2. Open `members/ab123.json` in Cursor and fill it in:
 
    ```json
    {
@@ -155,11 +155,11 @@ Once a lead merges your PR, you'll be on the members page within a few minutes. 
 |---|---|
 | `git push` asks for a password and then fails | GitHub doesn't accept account passwords in the terminal. Install [GitHub CLI](https://cli.github.com) and run `gh auth login`, then push again. |
 | `Permission denied` or `403` when you push | You cloned the original repo instead of your fork. Run `git remote set-url origin https://github.com/YOUR-USERNAME/catalyst-fall26.git` and push again. |
-| The check says "isn't valid JSON" | Look for a missing quote or comma, or an extra comma after the last line. VS Code underlines JSON mistakes in red. |
+| The check says "isn't valid JSON" | Look for a missing quote or comma, or an extra comma after the last line. Cursor underlines JSON mistakes in red. |
 | The check says the file name must be your NetID | Both files must be named with your NetID in lowercase, like `ab123.json` and `ab123.jpg`. |
 | The check says the photo is really a different format | Export the photo as a JPEG or PNG. Renaming it isn't enough. |
 | The check says your PR should only change files in `members/` | You changed another file by accident. Run the command the check shows to undo it, then commit and push. |
-| The check mentions a "BOM" character | Your editor saved the file in a slightly different format. The check's message says how to re-save it in VS Code. |
+| The check mentions a "BOM" character | Your editor saved the file in a slightly different format. The check's message says how to re-save it in Cursor. |
 | No **Compare & pull request** banner | Go to the **Pull requests** tab on your fork, click **New pull request**, and choose your branch. |
 | Something else | Ask in the group chat or at office hours, and paste the error message. |
 
