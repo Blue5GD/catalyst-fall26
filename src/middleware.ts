@@ -20,7 +20,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // user_metadata, which users can edit themselves.
     const { data: participant } = await supabase
       .from('participants')
-      .select('name, netid')
+      .select('name, netid, role')
       .eq('id', claims.sub)
       .maybeSingle();
 
@@ -30,6 +30,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         email: claims.email ?? '',
         name: participant.name,
         netid: participant.netid,
+        role: participant.role === 'admin' ? 'admin' : 'participant',
       };
     }
   }

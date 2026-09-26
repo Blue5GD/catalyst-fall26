@@ -8,6 +8,7 @@ declare namespace App {
       email: string;
       name: string;
       netid: string;
+      role: 'participant' | 'admin';
     } | null;
   }
 }
