@@ -1,0 +1,348 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PointsTable from '../../components/PointsTable.astro';
+import Toast from '../../components/Toast.astro';
+import { requireAdmin } from '../../lib/guards';
+import {
+  EMPTY_VALUES,
+  MAX_POINTS,
+  MAX_REASON,
+  addedMessage,
+  buttonLabel,
+  correctionValues,
+  isUuid,
+  parseAwardForm,
+  parseCorrectId,
+  peopleSummary,
+  type AwardErrors,
+  type AwardFormValues,
+  type PointRow,
+  type RecentRow,
+} from '../../lib/points-form';
+
+export const prerender = false;
+
+interface Person {
+  id: string;
+  netid: string;
+  name: string;
+}
+
+const gate = requireAdmin(Astro);
+if (gate instanceof Response) return gate;
+const forbidden = gate === 'forbidden';
+if (forbidden) Astro.response.status = 403;
+
+let values: AwardFormValues = { ...EMPTY_VALUES };
+let errors: AwardErrors = {};
+let dbError = '';
+let people: Person[] = [];
+let recent: RecentRow[] = [];
+let recentError = false;
+let toast: string | null = null;
+
+if (!forbidden) {
+  const { supabase } = gate;
+
+  if (Astro.request.method === 'POST') {
+    const parsed = parseAwardForm(await Astro.request.formData());
+    values = parsed.values;
+    errors = parsed.errors;
+    if (parsed.input) {
+      const { data, error } = await supabase.rpc('add_point_entries', {
+        p_participant_ids: parsed.input.participantIds,
+        p_amount: parsed.input.amount,
+        p_reason: parsed.input.reason,
+        p_source_type: parsed.input.sourceType,
+      });
+      // Post/redirect/get: a refresh after this can't add the entries twice.
+      if (!error) return Astro.redirect(`/admin?added=${data}&amount=${parsed.input.amount}`, 303);
+      console.error('add_point_entries failed:', error);
+      dbError = error.message;
+    }
+  } else {
+    toast = addedMessage(Astro.url.searchParams);
+    const correctId = parseCorrectId(Astro.url.searchParams.get('correct'));
+    const who = Astro.url.searchParams.get('who');
+    if (correctId !== null && isUuid(who)) {
+      const { data } = await supabase.rpc('point_history', { p_participant: who });
+      const entry = ((data ?? []) as PointRow[]).find((e) => e.id === correctId);
+      if (entry) values = correctionValues(who, entry);
+    }
+  }
+
+  const [peopleResult, recentResult] = await Promise.all([
+    supabase.from('participants').select('id, netid, name').eq('active', true).order('name'),
+    supabase.rpc('recent_point_entries', { p_limit: 50 }),
+  ]);
+  if (peopleResult.error) console.error('Failed to load participants:', peopleResult.error);
+  if (recentResult.error) console.error('Failed to load recent entries:', recentResult.error);
+  people = (peopleResult.data ?? []) as Person[];
+  recent = (recentResult.data ?? []) as RecentRow[];
+  recentError = Boolean(recentResult.error);
+}
+
+const pickedNames = people.filter((p) => values.participantIds.includes(p.id)).map((p) => p.name);
+const points = Number(values.points);
+const signed = Number.isInteger(points) && points >= 1 && points <= MAX_POINTS
+  ? (values.direction === 'remove' ? -points : points)
+  : null;
+---
+
+<BaseLayout title="Admin">
+  <section class="page admin">
+    <h2>Admin</h2>
+    {
+      forbidden ? (
+        <p class="page-intro">This page is for Catalyst leads.</p>
+      ) : (
+        <Fragment>
+          <div class="block" id="award">
+            <h3>Award or remove points</h3>
+            <p class="page-intro">Entries are permanent. To fix a mistake, add a correction.</p>
+
+            <form method="post" class="form award-form" novalidate data-award-form>
+              <div class="field">
+                <label class="label" for="participant" data-people-label>People</label>
+                <div class="chips" data-chips hidden />
+                <input
+                  class="input"
+                  id="people-search"
+                  type="search"
+                  list="people-list"
+                  placeholder="Name or NetID"
+                  autocomplete="off"
+                  hidden
+                  data-people-search
+                />
+                <datalist id="people-list">
+                  {people.map((p) => <option value={`${p.name} (${p.netid})`} />)}
+                </datalist>
+                <select
+                  class="input people-select"
+                  id="participant"
+                  name="participant"
+                  multiple
+                  size="8"
+                  aria-invalid={errors.people ? 'true' : undefined}
+                  aria-describedby={errors.people ? 'people-error' : undefined}
+                  data-people-select
+                >
+                  {people.map((p) => (
+                    <option value={p.id} selected={values.participantIds.includes(p.id)}>
+                      {`${p.name} (${p.netid})`}
+                    </option>
+                  ))}
+                </select>
+                {errors.people && <span class="form-error" id="people-error">{errors.people}</span>}
+              </div>
+
+              <div class="row">
+                <label class="field">
+                  <span class="label">Change</span>
+                  <select class="input" name="direction" data-direction>
+                    <option value="award" selected={values.direction === 'award'}>Award</option>
+                    <option value="remove" selected={values.direction === 'remove'}>Remove</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span class="label">Points</span>
+                  <input
+                    class="input num"
+                    name="points"
+                    inputmode="numeric"
+                    value={values.points}
+                    aria-invalid={errors.points ? 'true' : undefined}
+                    aria-describedby={errors.points ? 'points-error' : undefined}
+                    data-points
+                  />
+                  {errors.points && <span class="form-error" id="points-error">{errors.points}</span>}
+                </label>
+                <label class="field">
+                  <span class="label">Kind</span>
+                  <select class="input" name="kind">
+                    <option value="award" selected={values.kind === 'award'}>Award</option>
+                    <option value="correction" selected={values.kind === 'correction'}>Correction</option>
+                  </select>
+                </label>
+              </div>
+
+              <label class="field">
+                <span class="label">Reason</span>
+                <textarea
+                  class="input"
+                  name="reason"
+                  rows="2"
+                  maxlength={MAX_REASON}
+                  placeholder="Won the Project 1 design challenge"
+                  aria-invalid={errors.reason ? 'true' : undefined}
+                  aria-describedby={errors.reason ? 'reason-error' : 'reason-hint'}
+                >{values.reason}</textarea>
+                {errors.reason ? (
+                  <span class="form-error" id="reason-error">{errors.reason}</span>
+                ) : (
+                  <span class="field-hint" id="reason-hint">Shows in each person's points history.</span>
+                )}
+              </label>
+
+              <p class="summary num" aria-live="polite" data-summary>{peopleSummary(pickedNames, signed)}</p>
+              {dbError && <p class="form-error" role="alert">{dbError}</p>}
+              <div>
+                <button type="submit" class="btn btn--primary" data-submit>
+                  {buttonLabel(values.participantIds.length)}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div class="block">
+            <h3>Recent entries</h3>
+            {recentError ? (
+              <p class="page-intro">Recent entries couldn't load. Try again in a minute.</p>
+            ) : recent.length === 0 ? (
+              <p class="page-intro">No entries yet. Award the first points above.</p>
+            ) : (
+              <PointsTable rows={recent} showWho showBy />
+            )}
+          </div>
+        </Fragment>
+      )
+    }
+  </section>
+  <Toast message={toast} />
+</BaseLayout>
+
+<script>
+  import { buttonLabel, peopleSummary, MAX_POINTS } from '../../lib/points-form';
+
+  // Turns the plain multi-select into a search box plus removable chips.
+  // Without JavaScript the multi-select still works on its own.
+  const form = document.querySelector<HTMLFormElement>('[data-award-form]');
+  if (form) {
+    const select = form.querySelector<HTMLSelectElement>('[data-people-select]')!;
+    const search = form.querySelector<HTMLInputElement>('[data-people-search]')!;
+    const chips = form.querySelector<HTMLElement>('[data-chips]')!;
+    const label = form.querySelector<HTMLLabelElement>('[data-people-label]')!;
+    const direction = form.querySelector<HTMLSelectElement>('[data-direction]')!;
+    const pointsInput = form.querySelector<HTMLInputElement>('[data-points]')!;
+    const summary = form.querySelector<HTMLElement>('[data-summary]')!;
+    const submit = form.querySelector<HTMLButtonElement>('[data-submit]')!;
+
+    select.hidden = true;
+    search.hidden = false;
+    chips.hidden = false;
+    label.htmlFor = 'people-search';
+    if (select.getAttribute('aria-invalid')) search.setAttribute('aria-invalid', 'true');
+
+    const byLabel = new Map([...select.options].map((o) => [o.text, o]));
+    const nameOf = (o: HTMLOptionElement) => o.text.replace(/ \([^)]*\)$/, '');
+
+    const render = () => {
+      const picked = [...select.selectedOptions];
+      chips.replaceChildren(
+        ...picked.map((option) => {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'chip';
+          chip.textContent = `${nameOf(option)} ×`;
+          chip.setAttribute('aria-label', `Remove ${nameOf(option)}`);
+          chip.addEventListener('click', () => {
+            option.selected = false;
+            render();
+            search.focus();
+          });
+          return chip;
+        }),
+      );
+      const n = Number(pointsInput.value.trim());
+      const valid = /^\d{1,3}$/.test(pointsInput.value.trim()) && n >= 1 && n <= MAX_POINTS;
+      const amount = valid ? (direction.value === 'remove' ? -n : n) : null;
+      summary.textContent = peopleSummary(picked.map(nameOf), amount);
+      submit.textContent = buttonLabel(picked.length);
+    };
+
+    const pick = () => {
+      const option = byLabel.get(search.value);
+      if (!option) return false;
+      option.selected = true;
+      search.value = '';
+      render();
+      return true;
+    };
+
+    search.addEventListener('input', pick);
+    search.addEventListener('keydown', (event) => {
+      // Enter picks a match instead of submitting half-filled.
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        pick();
+      }
+    });
+    direction.addEventListener('change', render);
+    pointsInput.addEventListener('input', render);
+    // A double-click can't send the form twice.
+    form.addEventListener('submit', () => {
+      submit.disabled = true;
+    });
+
+    render();
+  }
+</script>
+
+<style>
+  .admin {
+    display: grid;
+    gap: var(--space-8);
+  }
+  .block {
+    display: grid;
+    gap: var(--space-5);
+  }
+  .award-form {
+    max-width: 560px;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: var(--space-4);
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .chips:empty {
+    display: none;
+  }
+  .chips :global(.chip) {
+    min-height: 44px;
+    padding: 0 var(--space-3);
+    background: transparent;
+    border: 1px solid var(--color-slash);
+    border-radius: var(--radius);
+    color: var(--color-text);
+    font: 500 var(--text-small) / 1 var(--font-sans);
+    cursor: pointer;
+    transition: border-color 150ms ease-out;
+  }
+  .chips :global(.chip:hover) {
+    border-color: var(--color-text-secondary);
+  }
+  .summary {
+    min-height: 1.5em;
+    color: var(--color-text);
+    font-size: var(--text-small);
+    font-weight: 500;
+  }
+  textarea.input {
+    resize: vertical;
+  }
+  @media (max-width: 720px) {
+    .admin {
+      gap: var(--space-7);
+    }
+    .row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
