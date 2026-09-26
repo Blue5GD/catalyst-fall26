@@ -9,6 +9,7 @@ import {
   MAX_REASON,
   addedMessage,
   buttonLabel,
+  correctionMax,
   correctionValues,
   isUuid,
   parseAwardForm,
@@ -36,6 +37,8 @@ if (forbidden) Astro.response.status = 403;
 let values: AwardFormValues = { ...EMPTY_VALUES };
 let errors: AwardErrors = {};
 let dbError = '';
+let notice = '';
+let maxPoints = MAX_POINTS;
 let people: Person[] = [];
 let recent: RecentRow[] = [];
 let recentError = false;
@@ -44,8 +47,20 @@ let toast: string | null = null;
 if (!forbidden) {
   const { supabase } = gate;
 
+  // The entry a correction undoes, so its full amount is allowed even over MAX_POINTS.
+  const findEntry = async (who: string, id: number) => {
+    const { data } = await supabase.rpc('point_history', { p_participant: who });
+    return ((data ?? []) as PointRow[]).find((e) => e.id === id) ?? null;
+  };
+
   if (Astro.request.method === 'POST') {
-    const parsed = parseAwardForm(await Astro.request.formData());
+    const formData = await Astro.request.formData();
+    const correctsId = parseCorrectId(String(formData.get('corrects') ?? ''));
+    const whoValues = formData.getAll('participant');
+    const who = whoValues.length === 1 ? String(whoValues[0]) : null;
+    if (correctsId !== null && isUuid(who) && formData.get('kind') === 'correction') maxPoints = correctionMax(await findEntry(who, correctsId));
+
+    const parsed = parseAwardForm(formData, maxPoints);
     values = parsed.values;
     errors = parsed.errors;
     if (parsed.input) {
@@ -54,20 +69,29 @@ if (!forbidden) {
         p_amount: parsed.input.amount,
         p_reason: parsed.input.reason,
         p_source_type: parsed.input.sourceType,
+        // Left out rather than null, so the call still works before the
+        // corrections migration is applied.
+        ...(parsed.input.sourceId !== null && { p_source_id: parsed.input.sourceId }),
       });
       // Post/redirect/get: a refresh after this can't add the entries twice.
       if (!error) return Astro.redirect(`/admin?added=${data}&amount=${parsed.input.amount}`, 303);
       console.error('add_point_entries failed:', error);
-      dbError = error.message;
+      // P0001 is a message the database wrote for people. Anything else isn't.
+      dbError = error.code === 'P0001'
+        ? error.message
+        : "Couldn't save the entries. Nothing was added. Try again in a minute.";
     }
   } else {
     toast = addedMessage(Astro.url.searchParams);
     const correctId = parseCorrectId(Astro.url.searchParams.get('correct'));
     const who = Astro.url.searchParams.get('who');
     if (correctId !== null && isUuid(who)) {
-      const { data } = await supabase.rpc('point_history', { p_participant: who });
-      const entry = ((data ?? []) as PointRow[]).find((e) => e.id === correctId);
-      if (entry) values = correctionValues(who, entry);
+      const entry = await findEntry(who, correctId);
+      if (entry?.corrected) notice = 'That entry was already corrected.';
+      else if (entry) {
+        values = correctionValues(who, entry);
+        maxPoints = correctionMax(entry);
+      }
     }
   }
 
@@ -80,11 +104,19 @@ if (!forbidden) {
   people = (peopleResult.data ?? []) as Person[];
   recent = (recentResult.data ?? []) as RecentRow[];
   recentError = Boolean(recentResult.error);
+
+  // A correction for someone who has since gone inactive can't be saved.
+  const missing = values.participantIds.filter((id) => !people.some((p) => p.id === id));
+  if (Astro.request.method === 'GET' && values.corrects && missing.length > 0) {
+    notice = "This person isn't an active participant anymore, so their entries can't be corrected.";
+    values = { ...EMPTY_VALUES };
+    maxPoints = MAX_POINTS;
+  }
 }
 
 const pickedNames = people.filter((p) => values.participantIds.includes(p.id)).map((p) => p.name);
 const points = Number(values.points);
-const signed = Number.isInteger(points) && points >= 1 && points <= MAX_POINTS
+const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
   ? (values.direction === 'remove' ? -points : points)
   : null;
 ---
@@ -100,8 +132,10 @@ const signed = Number.isInteger(points) && points >= 1 && points <= MAX_POINTS
           <div class="block" id="award">
             <h3>Award or remove points</h3>
             <p class="page-intro">Entries are permanent. To fix a mistake, add a correction.</p>
+            {notice && <p class="form-error" role="alert">{notice}</p>}
 
             <form method="post" class="form award-form" novalidate data-award-form>
+              <input type="hidden" name="corrects" value={values.corrects} />
               <div class="field">
                 <label class="label" for="participant" data-people-label>People</label>
                 <div class="chips" data-chips hidden />
@@ -152,6 +186,7 @@ const signed = Number.isInteger(points) && points >= 1 && points <= MAX_POINTS
                     name="points"
                     inputmode="numeric"
                     value={values.points}
+                    data-max={maxPoints}
                     aria-invalid={errors.points ? 'true' : undefined}
                     aria-describedby={errors.points ? 'points-error' : undefined}
                     data-points
@@ -213,7 +248,7 @@ const signed = Number.isInteger(points) && points >= 1 && points <= MAX_POINTS
 </BaseLayout>
 
 <script>
-  import { buttonLabel, peopleSummary, MAX_POINTS } from '../../lib/points-form';
+  import { buttonLabel, peopleSummary } from '../../lib/points-form';
 
   // Turns the plain multi-select into a search box plus removable chips.
   // Without JavaScript the multi-select still works on its own.
@@ -255,7 +290,7 @@ const signed = Number.isInteger(points) && points >= 1 && points <= MAX_POINTS
         }),
       );
       const n = Number(pointsInput.value.trim());
-      const valid = /^\d{1,3}$/.test(pointsInput.value.trim()) && n >= 1 && n <= MAX_POINTS;
+      const valid = /^\d{1,6}$/.test(pointsInput.value.trim()) && n >= 1 && n <= Number(pointsInput.dataset.max);
       const amount = valid ? (direction.value === 'remove' ? -n : n) : null;
       summary.textContent = peopleSummary(picked.map(nameOf), amount);
       submit.textContent = buttonLabel(picked.length);

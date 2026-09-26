@@ -24,7 +24,7 @@ if (history.error) console.error('Failed to load points history:', history.error
 if (standing.error) console.error('Failed to load standing:', standing.error);
 
 const rows = (history.data ?? []) as PointRow[];
-// Inactive accounts aren't on the leaderboard, so fall back to adding up history.
+// If the leaderboard didn't load, adding up history gives the same number.
 const earned = standing.data?.earned ?? rows.reduce((sum, r) => sum + r.amount, 0);
 const rank = shownRank(earned, standing.data?.rank ?? null);
 const total = everyone.count ?? null;

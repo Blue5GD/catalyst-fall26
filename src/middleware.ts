@@ -18,11 +18,21 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (claims) {
     // Name and NetID come from the participants row, not the token's
     // user_metadata, which users can edit themselves.
-    const { data: participant } = await supabase
+    let { data: participant, error } = await supabase
       .from('participants')
       .select('name, netid, role')
       .eq('id', claims.sub)
-      .maybeSingle();
+      .maybeSingle<{ name: string; netid: string; role?: string }>();
+    // Without the admin_points migration, reading role fails. Stay signed in
+    // as a participant rather than signing everyone out.
+    if (error) {
+      console.error('Failed to load participant with role, retrying without it:', error);
+      ({ data: participant } = await supabase
+        .from('participants')
+        .select('name, netid')
+        .eq('id', claims.sub)
+        .maybeSingle());
+    }
 
     if (participant) {
       context.locals.user = {

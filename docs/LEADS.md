@@ -30,22 +30,36 @@ Points live in the `point_entries` table. Each row is one award, and the leaderb
 
 ### Award points
 
-1. Open **Table Editor → point_entries → Insert → Insert row**.
-2. Fill in:
+1. Go to `/admin` on the site. Only accounts with `role` set to `admin` can open it.
+2. Pick one or more people, the points (1 to 100), and a short, specific reason like "Won the Project 1 design challenge".
+3. Choose **Award** for challenge or project prizes, or **Correction** when you're fixing a mistake.
 
-   | Field | What to enter |
-   |---|---|
-   | `participant_id` | Click it and pick the person by name |
-   | `amount` | Points to award, like `1` or `2` |
-   | `reason` | Short and specific: "Workshop 1 attendance", "Group 4 photo, Oct 3" |
-   | `source_type` | `manual` for anything you enter by hand; `award` for challenge or project prizes |
-   | `created_by` | Your NetID |
-
-3. Leave `id`, `source_id` and `created_at` empty. They fill themselves in.
+The reason shows in each person's points history. The site records your NetID as the person who awarded the points.
 
 ### Fix a mistake
 
-You can't edit or delete a row. The log is append-only on purpose, so there's always a record of every change. To undo an award, insert a new row with the **negative** amount and a reason like "Correction: duplicate of Oct 3 photo".
+You can't edit or delete an entry. The log is append-only on purpose, so there's always a record of every change. To undo one:
+
+1. Find the entry under **Recent entries** on `/admin`, or on the person's page (click their name).
+2. Click **Correct**. The form fills in the reversing entry.
+3. Check it and submit. The original entry then shows **Corrected**, and it can't be corrected a second time.
+
+Entries for people who are no longer active can't be corrected.
+
+### Table editor (fallback)
+
+If the site is down, add a row in **Table Editor → point_entries → Insert → Insert row**:
+
+| Field | What to enter |
+|---|---|
+| `participant_id` | Click it and pick the person by name |
+| `amount` | Points to award, like `1` or `2`. Negative to undo an entry. |
+| `reason` | Short and specific: "Workshop 1 attendance", "Group 4 photo, Oct 3" |
+| `source_type` | `manual` for anything you enter by hand; `award` for challenge or project prizes |
+| `source_id` | For a correction, the `id` of the entry you're undoing. Otherwise leave it empty. |
+| `created_by` | Your NetID |
+
+Leave `id` and `created_at` empty. They fill themselves in.
 
 **Don't record reward spending as a negative entry.** The leaderboard ranks by the sum of these rows, so spending would lower someone's rank. Rewards get their own table in Phase 2 (PRD P-5). Until then, track redemptions separately.
 
@@ -83,7 +97,7 @@ There's no "forgot password" page yet, and password emails need a custom email p
 
 ### Database
 
-Apply the database migrations to the live project. You only need to do this when `supabase/migrations/` changes:
+Apply the database migrations to the live project. You only need to do this when `supabase/migrations/` changes. Do it **before** merging the PR that adds the migration, so the site never runs against an older database:
 
 ```bash
 npx supabase login

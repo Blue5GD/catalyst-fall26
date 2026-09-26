@@ -15,6 +15,8 @@ export interface PointRow {
   source_type: string;
   created_by: string | null;
   created_at: string;
+  /** A correction already points at this entry. */
+  corrected: boolean;
 }
 
 /** A row from recent_point_entries(). */
@@ -22,6 +24,7 @@ export interface RecentRow extends PointRow {
   participant_id: string;
   netid: string;
   name: string;
+  active: boolean;
 }
 
 export interface AwardFormValues {
@@ -30,6 +33,8 @@ export interface AwardFormValues {
   points: string;
   kind: 'award' | 'correction';
   reason: string;
+  /** The entry being corrected, as sent in the hidden field. Empty if none. */
+  corrects: string;
 }
 
 /** What add_point_entries() needs. */
@@ -38,6 +43,8 @@ export interface AwardInput {
   amount: number;
   reason: string;
   sourceType: 'award' | 'manual';
+  /** The entry this corrects, or null. */
+  sourceId: number | null;
 }
 
 export type AwardErrors = Partial<Record<'people' | 'points' | 'reason', string>>;
@@ -48,6 +55,7 @@ export const EMPTY_VALUES: AwardFormValues = {
   points: '',
   kind: 'award',
   reason: '',
+  corrects: '',
 };
 
 export function isUuid(value: string | null | undefined): value is string {
@@ -59,7 +67,11 @@ function text(form: FormData, name: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-export function parseAwardForm(form: FormData): {
+/**
+ * maxPoints is MAX_POINTS, or more when correcting a bigger entry (the page
+ * looks the entry up first).
+ */
+export function parseAwardForm(form: FormData, maxPoints = MAX_POINTS): {
   values: AwardFormValues;
   errors: AwardErrors;
   input: AwardInput | null;
@@ -75,14 +87,15 @@ export function parseAwardForm(form: FormData): {
     points: text(form, 'points'),
     kind: text(form, 'kind') === 'correction' ? 'correction' : 'award',
     reason: text(form, 'reason').replace(/\s+/g, ' '),
+    corrects: String(parseCorrectId(text(form, 'corrects')) ?? ''),
   };
 
   const errors: AwardErrors = {};
   if (values.participantIds.length === 0) errors.people = 'Add at least one person.';
 
-  const points = /^\d{1,3}$/.test(values.points) ? Number(values.points) : NaN;
-  if (!(points >= 1 && points <= MAX_POINTS)) {
-    errors.points = `Enter a whole number from 1 to ${MAX_POINTS}.`;
+  const points = /^\d{1,6}$/.test(values.points) ? Number(values.points) : NaN;
+  if (!(points >= 1 && points <= maxPoints)) {
+    errors.points = `Enter a whole number from 1 to ${maxPoints}.`;
   }
 
   if (!values.reason) {
@@ -98,13 +111,20 @@ export function parseAwardForm(form: FormData): {
           amount: values.direction === 'remove' ? -points : points,
           reason: values.reason,
           sourceType: values.kind === 'correction' ? 'manual' : 'award',
+          // Only a correction links to an entry. Switching Kind to Award drops it.
+          sourceId: values.kind === 'correction' && values.corrects ? Number(values.corrects) : null,
         }
       : null;
 
   return { values, errors, input };
 }
 
-/** The entry id from ?correct=, or null if it isn't a plausible id. */
+/** The points limit when correcting this entry: the full amount, even over MAX_POINTS. */
+export function correctionMax(entry: Pick<PointRow, 'amount'> | null | undefined): number {
+  return entry ? Math.max(MAX_POINTS, Math.abs(entry.amount)) : MAX_POINTS;
+}
+
+/** The entry id from ?correct= or the form, or null if it isn't a plausible id. */
 export function parseCorrectId(value: string | null): number | null {
   if (!value || !/^[1-9]\d{0,14}$/.test(value)) return null;
   return Number(value);
@@ -113,7 +133,7 @@ export function parseCorrectId(value: string | null): number | null {
 /** Form values that undo an entry: same person and points, opposite direction. */
 export function correctionValues(
   participantId: string,
-  entry: Pick<PointRow, 'amount' | 'reason'>,
+  entry: Pick<PointRow, 'id' | 'amount' | 'reason'>,
 ): AwardFormValues {
   return {
     participantIds: [participantId],
@@ -121,6 +141,7 @@ export function correctionValues(
     points: String(Math.abs(entry.amount)),
     kind: 'correction',
     reason: `Correction: ${entry.reason}`.slice(0, MAX_REASON),
+    corrects: String(entry.id),
   };
 }
 
@@ -170,7 +191,7 @@ export function buttonLabel(count: number): string {
 export function addedMessage(params: URLSearchParams): string | null {
   const added = params.get('added') ?? '';
   const amount = params.get('amount') ?? '';
-  if (!/^\d{1,3}$/.test(added) || !/^-?\d{1,3}$/.test(amount)) return null;
+  if (!/^\d{1,3}$/.test(added) || !/^-?\d{1,6}$/.test(amount)) return null;
   const n = Number(added);
   return `Added ${formatPoints(Number(amount))} to ${n} ${n === 1 ? 'person' : 'people'}.`;
 }

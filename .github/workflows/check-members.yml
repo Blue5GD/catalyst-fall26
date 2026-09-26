@@ -50,5 +50,7 @@ jobs:
       - run: npm ci
       - name: Type-check
         run: npm run check
+      - name: Unit tests
+        run: npm test
       - name: Build the site
         run: npm run build

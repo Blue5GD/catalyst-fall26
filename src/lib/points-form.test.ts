@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   addedMessage,
   buttonLabel,
+  correctionMax,
   correctionValues,
   formatDate,
   formatPoints,
@@ -27,14 +28,49 @@ test('parseAwardForm builds an award for several people', () => {
     form({ participant: [A, B], direction: 'award', points: ' 7 ', kind: 'award', reason: ' Won  the challenge ' }),
   );
   assert.deepEqual(errors, {});
-  assert.deepEqual(input, { participantIds: [A, B], amount: 7, reason: 'Won the challenge', sourceType: 'award' });
+  assert.deepEqual(input, {
+    participantIds: [A, B],
+    amount: 7,
+    reason: 'Won the challenge',
+    sourceType: 'award',
+    sourceId: null,
+  });
 });
 
 test('parseAwardForm turns remove + correction into a negative manual entry', () => {
   const { input } = parseAwardForm(
     form({ participant: A, direction: 'remove', points: '2', kind: 'correction', reason: 'Counted twice' }),
   );
-  assert.deepEqual(input, { participantIds: [A], amount: -2, reason: 'Counted twice', sourceType: 'manual' });
+  assert.deepEqual(input, { participantIds: [A], amount: -2, reason: 'Counted twice', sourceType: 'manual', sourceId: null });
+});
+
+test('parseAwardForm links a correction to the entry it fixes', () => {
+  const { input } = parseAwardForm(
+    form({ participant: A, direction: 'remove', points: '2', kind: 'correction', reason: 'x', corrects: '42' }),
+  );
+  assert.equal(input?.sourceId, 42);
+});
+
+test('parseAwardForm drops the link when Kind is switched to Award', () => {
+  const { input } = parseAwardForm(form({ participant: A, points: '2', kind: 'award', reason: 'x', corrects: '42' }));
+  assert.equal(input?.sourceId, null);
+});
+
+test('parseAwardForm ignores a malformed corrects value', () => {
+  const { values } = parseAwardForm(form({ participant: A, points: '2', kind: 'correction', reason: 'x', corrects: 'abc' }));
+  assert.equal(values.corrects, '');
+});
+
+test('parseAwardForm accepts a bigger correction when allowed', () => {
+  const f = form({ participant: A, direction: 'remove', points: '250', kind: 'correction', reason: 'x', corrects: '7' });
+  assert.equal(parseAwardForm(f).errors.points, 'Enter a whole number from 1 to 100.');
+  assert.deepEqual(parseAwardForm(f, 250).errors, {});
+});
+
+test('correctionMax allows the full original amount', () => {
+  assert.equal(correctionMax(null), 100);
+  assert.equal(correctionMax({ amount: 5 }), 100);
+  assert.equal(correctionMax({ amount: -250 }), 250);
 });
 
 test('parseAwardForm drops duplicate and malformed ids', () => {
@@ -64,7 +100,14 @@ test('parseAwardForm rejects a reason over 200 characters', () => {
 
 test('parseAwardForm keeps entered values for re-rendering', () => {
   const { values } = parseAwardForm(form({ participant: A, direction: 'remove', points: 'x', kind: 'correction', reason: 'r' }));
-  assert.deepEqual(values, { participantIds: [A], direction: 'remove', points: 'x', kind: 'correction', reason: 'r' });
+  assert.deepEqual(values, {
+    participantIds: [A],
+    direction: 'remove',
+    points: 'x',
+    kind: 'correction',
+    reason: 'r',
+    corrects: '',
+  });
 });
 
 test('parseCorrectId accepts positive integers only', () => {
@@ -79,15 +122,16 @@ test('isUuid', () => {
 });
 
 test('correctionValues reverses the entry', () => {
-  assert.deepEqual(correctionValues(A, { amount: 3, reason: 'Workshop 1' }), {
+  assert.deepEqual(correctionValues(A, { id: 9, amount: 3, reason: 'Workshop 1' }), {
     participantIds: [A],
     direction: 'remove',
     points: '3',
     kind: 'correction',
     reason: 'Correction: Workshop 1',
+    corrects: '9',
   });
-  assert.equal(correctionValues(A, { amount: -2, reason: 'x' }).direction, 'award');
-  assert.equal(correctionValues(A, { amount: 1, reason: 'a'.repeat(200) }).reason.length, 200);
+  assert.equal(correctionValues(A, { id: 9, amount: -2, reason: 'x' }).direction, 'award');
+  assert.equal(correctionValues(A, { id: 9, amount: 1, reason: 'a'.repeat(200) }).reason.length, 200);
 });
 
 test('formatPoints uses a real minus sign', () => {
@@ -119,6 +163,7 @@ test('buttonLabel', () => {
 test('addedMessage reads the redirect query', () => {
   assert.equal(addedMessage(new URLSearchParams('added=2&amount=3')), 'Added +3 to 2 people.');
   assert.equal(addedMessage(new URLSearchParams('added=1&amount=-2')), 'Added −2 to 1 person.');
+  assert.equal(addedMessage(new URLSearchParams('added=1&amount=-250')), 'Added −250 to 1 person.');
   assert.equal(addedMessage(new URLSearchParams('added=abc&amount=3')), null);
   assert.equal(addedMessage(new URLSearchParams('')), null);
 });

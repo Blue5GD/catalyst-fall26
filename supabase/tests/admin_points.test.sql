@@ -2,7 +2,7 @@
 -- Run with: npx supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(17);
+select plan(33);
 
 -- The sign-up trigger creates a participants row for each of these. Names and
 -- emails are unusual so they can't clash with accounts already in the database.
@@ -69,7 +69,7 @@ select throws_ok(
 );
 select throws_ok(
   $$select public.add_point_entries(array['00000000-0000-0000-0000-00000000000b']::uuid[], 0, 'x', 'award')$$,
-  'P0001', 'Points can''t be 0.',
+  'P0001', 'Enter a whole number from 1 to 100.',
   'zero points are rejected'
 );
 select throws_ok(
@@ -93,22 +93,97 @@ select is(
   'an admin can read the recent log'
 );
 
+select throws_ok(
+  $$select public.add_point_entries(array['00000000-0000-0000-0000-00000000000b']::uuid[], 101, 'x', 'award')$$,
+  'P0001', 'Enter a whole number from 1 to 100.',
+  'more than 100 points is rejected'
+);
+select throws_ok(
+  $$select public.add_point_entries(array['00000000-0000-0000-0000-00000000000b']::uuid[], 1, repeat('a', 201), 'award')$$,
+  'P0001', 'Keep the reason to 200 characters or fewer.',
+  'a reason over 200 characters is rejected'
+);
+
+-- Corrections -------------------------------------------------------------------
+-- Sam's award from above is the entry being corrected.
+create temp table sam_award on commit drop as
+  select id from public.point_history('00000000-0000-0000-0000-00000000000c');
+grant select on sam_award to authenticated;
+
+select throws_ok(
+  format($$select public.add_point_entries(array['00000000-0000-0000-0000-00000000000b']::uuid[], -3, 'Correction', 'manual', %s)$$,
+    (select id from sam_award)),
+  'P0001', 'The entry being corrected isn''t in this person''s history.',
+  'a correction must be for the entry''s own person'
+);
+select throws_ok(
+  format($$select public.add_point_entries(array['00000000-0000-0000-0000-00000000000c']::uuid[], -3, 'Correction', 'award', %s)$$,
+    (select id from sam_award)),
+  'P0001', 'A correction is for one person and one entry.',
+  'a linked entry must be a correction'
+);
+select is(
+  public.add_point_entries(array['00000000-0000-0000-0000-00000000000c']::uuid[], -3, 'Correction: Won', 'manual',
+    (select id from sam_award)),
+  1,
+  'an admin can correct an entry'
+);
+select is(
+  (select corrected from public.point_history('00000000-0000-0000-0000-00000000000c') where id = (select id from sam_award)),
+  true,
+  'history marks the entry as corrected'
+);
+select is(
+  (select corrected from public.recent_point_entries(50) where id = (select id from sam_award)),
+  true,
+  'the recent log marks the entry as corrected'
+);
+select throws_ok(
+  format($$select public.add_point_entries(array['00000000-0000-0000-0000-00000000000c']::uuid[], -3, 'Again', 'manual', %s)$$,
+    (select id from sam_award)),
+  'P0001', 'That entry was already corrected.',
+  'an entry can only be corrected once'
+);
+
 -- Stored rows (checked as the table owner) -------------------------------------
 reset role;
 select is(
   (select count(*)::integer from public.point_entries
-    where created_by = 'Pgtap Lead' and reason = 'Won the design challenge' and amount = 3 and source_type = 'award'),
+    where created_by = 'zzlead' and reason = 'Won the design challenge' and amount = 3 and source_type = 'award'),
   2,
-  'created_by is set by the database and the reason is trimmed'
+  'created_by is the admin''s NetID and the reason is trimmed'
 );
+
+-- A correction may undo an entry bigger than 100 (added in the table editor).
+insert into public.point_entries (participant_id, amount, reason, created_by)
+  values ('00000000-0000-0000-0000-00000000000b', 250, 'Typo, meant 25', 'zzlead');
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+set local role authenticated;
+select is(
+  public.add_point_entries(array['00000000-0000-0000-0000-00000000000b']::uuid[], -250, 'Correction: typo', 'manual',
+    (select id from public.point_history('00000000-0000-0000-0000-00000000000b') where amount = 250)),
+  1,
+  'a correction can undo the full original amount'
+);
+select is(
+  (select active from public.recent_point_entries(50) where netid = 'zzmaya' limit 1),
+  true,
+  'the recent log says whether the person is active'
+);
+reset role;
 
 -- History as a participant ------------------------------------------------------
 select pg_temp.act_as('00000000-0000-0000-0000-00000000000b');
 set local role authenticated;
 select is(
   (select count(*)::integer from public.point_history('00000000-0000-0000-0000-00000000000b')),
-  1,
+  3,
   'a participant can read their own history'
+);
+select is(
+  (select created_by from public.point_history('00000000-0000-0000-0000-00000000000b') where reason = 'Won the design challenge'),
+  'zzlead',
+  'a participant can see which lead awarded their points'
 );
 select is(
   (select count(*)::integer from public.point_history('00000000-0000-0000-0000-00000000000c')),
@@ -126,6 +201,16 @@ select throws_ok(
   'P0001', 'Only Catalyst leads can add points.',
   'a deactivated admin cannot add points'
 );
+select throws_ok(
+  $$select * from public.recent_point_entries(50)$$,
+  'P0001', 'Only Catalyst leads can see all entries.',
+  'a deactivated admin cannot read the recent log'
+);
+select is(
+  (select count(*)::integer from public.point_history('00000000-0000-0000-0000-00000000000c')),
+  0,
+  'a deactivated admin cannot read someone else''s history'
+);
 
 -- Visitors ---------------------------------------------------------------------
 reset role;
@@ -134,6 +219,21 @@ select throws_ok(
   $$select role from public.participants$$,
   '42501', null,
   'visitors cannot read role'
+);
+select throws_ok(
+  $$select public.add_point_entries(array['00000000-0000-0000-0000-00000000000b']::uuid[], 1, 'x', 'award')$$,
+  '42501', null,
+  'visitors cannot add points'
+);
+select throws_ok(
+  $$select * from public.point_history('00000000-0000-0000-0000-00000000000b')$$,
+  '42501', null,
+  'visitors cannot read history'
+);
+select throws_ok(
+  $$select * from public.recent_point_entries(50)$$,
+  '42501', null,
+  'visitors cannot read the recent log'
 );
 
 reset role;

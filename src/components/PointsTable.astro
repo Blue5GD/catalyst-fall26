@@ -18,6 +18,9 @@ const correctHref = (row: PointRow | RecentRow) => {
   const who = 'participant_id' in row ? row.participant_id : correctFor;
   return `/admin?correct=${row.id}&who=${who}#award`;
 };
+// Inactive people are hidden from the participants list, so their page would
+// 404 and a correction couldn't be saved.
+const isActive = (row: PointRow | RecentRow) => !('active' in row) || row.active;
 ---
 
 <div class="table-scroll">
@@ -39,7 +42,11 @@ const correctHref = (row: PointRow | RecentRow) => {
             <td class="num when wide-only">{formatDate(row.created_at, showBy)}</td>
             {showWho && 'netid' in row && (
               <td class="who">
-                <a href={`/admin/people/${row.netid}`}>{row.name}</a>
+                {isActive(row) ? (
+                  <a href={`/admin/people/${row.netid}`}>{row.name}</a>
+                ) : (
+                  <>{row.name} <span class="inactive">(inactive)</span></>
+                )}
               </td>
             )}
             <td class="reason">
@@ -52,7 +59,11 @@ const correctHref = (row: PointRow | RecentRow) => {
             <td class:list={['num', row.amount < 0 ? 'neg' : 'pos']}>{formatPoints(row.amount)}</td>
             {showCorrect && (
               <td class="action">
-                <a href={correctHref(row)}>Correct</a>
+                {row.corrected ? (
+                  <span class="corrected">Corrected</span>
+                ) : (
+                  isActive(row) && <a href={correctHref(row)}>Correct</a>
+                )}
               </td>
             )}
           </tr>
@@ -87,6 +98,11 @@ const correctHref = (row: PointRow | RecentRow) => {
     align-items: center;
     min-height: 44px;
     font-size: var(--text-small);
+  }
+  .corrected,
+  .inactive {
+    font-size: var(--text-small);
+    color: var(--color-text-muted);
   }
   .who a {
     display: inline-flex;
