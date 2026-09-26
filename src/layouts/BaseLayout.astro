@@ -23,7 +23,9 @@ const path = Astro.url.pathname.replace(/\/$/, '') || '/';
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -64,6 +66,7 @@ const path = Astro.url.pathname.replace(/\/$/, '') || '/';
 <style>
   .site-header {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     gap: var(--space-4);
@@ -85,6 +88,7 @@ const path = Astro.url.pathname.replace(/\/$/, '') || '/';
 
   nav {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-5);
   }

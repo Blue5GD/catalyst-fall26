@@ -1,0 +1,142 @@
+---
+import { Image } from 'astro:assets';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PointsTable from '../components/PointsTable.astro';
+import { requireUser } from '../lib/guards';
+import { getMembers } from '../lib/members';
+import { shownRank, type PointRow } from '../lib/points-form';
+
+export const prerender = false;
+
+const CONTRIBUTING_URL = 'https://github.com/eliboug/catalyst-fall26/blob/main/CONTRIBUTING.md';
+
+const gate = requireUser(Astro);
+if (gate instanceof Response) return gate;
+const { user, supabase } = gate;
+
+const [history, standing, everyone] = await Promise.all([
+  supabase.rpc('point_history', { p_participant: user.id }),
+  supabase.from('leaderboard').select('earned, rank').eq('netid', user.netid).maybeSingle(),
+  supabase.from('leaderboard').select('netid', { count: 'exact', head: true }),
+]);
+
+if (history.error) console.error('Failed to load points history:', history.error);
+if (standing.error) console.error('Failed to load standing:', standing.error);
+
+const rows = (history.data ?? []) as PointRow[];
+// If the leaderboard didn't load, adding up history gives the same number.
+const earned = standing.data?.earned ?? rows.reduce((sum, r) => sum + r.amount, 0);
+const rank = shownRank(earned, standing.data?.rank ?? null);
+const total = everyone.count ?? null;
+const member = (await getMembers()).find((m) => m.netid === user.netid);
+---
+
+<BaseLayout title="You">
+  <section class="page profile">
+    <div class="profile-text">
+      <h2>{user.name}</h2>
+      <p class="label">{user.netid}</p>
+      <dl class="stats">
+        <div>
+          <dt class="label">Earned</dt>
+          <dd class="stat num">{earned}</dd>
+        </div>
+        <div>
+          <dt class="label">Rank</dt>
+          <dd class="stat num">
+            {rank ? <>{rank}{total && <span class="of"> of {total}</span>}</> : '—'}
+          </dd>
+        </div>
+      </dl>
+    </div>
+    <div class:list={['profile-photo', { 'has-photo': member?.photo }]}>
+      {
+        member?.photo ? (
+          <Image src={member.photo} alt={user.name} width={480} height={480} fit="cover" class="photo" />
+        ) : (
+          <p class="no-photo">
+            Add your photo and bio. See how in <a href={CONTRIBUTING_URL}>CONTRIBUTING.md</a>.
+          </p>
+        )
+      }
+    </div>
+  </section>
+
+  <section class="history">
+    <h3>Points history</h3>
+    {
+      history.error ? (
+        <p class="page-intro">Your points history couldn't load. Try again in a minute.</p>
+      ) : rows.length === 0 ? (
+        <p class="page-intro">No points yet. Come to a workshop to earn your first.</p>
+      ) : (
+        <PointsTable rows={rows} />
+      )
+    }
+  </section>
+</BaseLayout>
+
+<style>
+  /* "Image with text" slide: text left, photo right; photo on top on phones. */
+  .profile {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-7);
+    align-items: start;
+  }
+  .profile-text {
+    display: grid;
+    gap: var(--space-3);
+  }
+  .stats {
+    display: flex;
+    gap: var(--space-7);
+    margin: var(--space-5) 0 0;
+  }
+  .stats div {
+    display: grid;
+    gap: var(--space-1);
+  }
+  .stats dd {
+    margin: 0;
+  }
+  .stat {
+    font-size: var(--text-section);
+    font-weight: 500;
+    line-height: 1;
+    color: var(--color-text);
+  }
+  .of {
+    font-size: var(--text-small);
+    color: var(--color-text-muted);
+  }
+  .photo {
+    width: 100%;
+    max-width: 480px;
+    height: auto;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: var(--radius);
+  }
+  .no-photo {
+    padding-top: var(--space-2);
+  }
+  .history {
+    display: grid;
+    gap: var(--space-5);
+    margin-top: var(--space-8);
+  }
+  @media (max-width: 720px) {
+    .profile {
+      grid-template-columns: 1fr;
+      gap: var(--space-5);
+    }
+    /* The photo goes on top; the add-a-photo note stays below the name. */
+    .has-photo {
+      order: -1;
+    }
+    .history {
+      margin-top: var(--space-7);
+    }
+  }
+</style>

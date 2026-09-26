@@ -1,0 +1,135 @@
+---
+// Points history table, used on /me, /admin and /admin/people/<netid>.
+import { formatDate, formatPoints, type PointRow, type RecentRow } from '../lib/points-form';
+
+interface Props {
+  rows: PointRow[] | RecentRow[];
+  /** Adds a Who column. Rows must be RecentRow. */
+  showWho?: boolean;
+  /** Adds a By column (who awarded it). Admins only. */
+  showBy?: boolean;
+  /** Participant id for Correct links on a one-person table. */
+  correctFor?: string;
+}
+
+const { rows, showWho = false, showBy = false, correctFor } = Astro.props;
+const showCorrect = showWho || Boolean(correctFor);
+const correctHref = (row: PointRow | RecentRow) => {
+  const who = 'participant_id' in row ? row.participant_id : correctFor;
+  return `/admin?correct=${row.id}&who=${who}#award`;
+};
+// Inactive people are hidden from the participants list, so their page would
+// 404 and a correction couldn't be saved.
+const isActive = (row: PointRow | RecentRow) => !('active' in row) || row.active;
+---
+
+<div class="table-scroll">
+  <table class="table points-table">
+    <thead>
+      <tr>
+        <th scope="col" class="wide-only">When</th>
+        {showWho && <th scope="col">Who</th>}
+        <th scope="col">Reason</th>
+        {showBy && <th scope="col" class="wide-only">By</th>}
+        <th scope="col" class="num">Points</th>
+        {showCorrect && <th scope="col"><span class="visually-hidden">Actions</span></th>}
+      </tr>
+    </thead>
+    <tbody>
+      {
+        rows.map((row) => (
+          <tr>
+            <td class="num when wide-only">{formatDate(row.created_at, showBy)}</td>
+            {showWho && 'netid' in row && (
+              <td class="who">
+                {isActive(row) ? (
+                  <a href={`/admin/people/${row.netid}`}>{row.name}</a>
+                ) : (
+                  <>{row.name} <span class="inactive">(inactive)</span></>
+                )}
+              </td>
+            )}
+            <td class="reason">
+              {row.reason}
+              <span class="meta narrow-only">
+                {formatDate(row.created_at, showBy)}{showBy && row.created_by && ` · ${row.created_by}`}
+              </span>
+            </td>
+            {showBy && <td class="by wide-only">{row.created_by ?? '—'}</td>}
+            <td class:list={['num', row.amount < 0 ? 'neg' : 'pos']}>{formatPoints(row.amount)}</td>
+            {showCorrect && (
+              <td class="action">
+                {row.corrected ? (
+                  <span class="corrected">Corrected</span>
+                ) : (
+                  isActive(row) && <a href={correctHref(row)}>Correct</a>
+                )}
+              </td>
+            )}
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .when {
+    white-space: nowrap;
+    color: var(--color-text-muted);
+    text-align: left;
+  }
+  .reason {
+    min-width: 200px;
+  }
+  .by {
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+  }
+  .neg {
+    color: var(--color-text-secondary);
+  }
+  .action {
+    white-space: nowrap;
+    text-align: right;
+  }
+  .action a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    font-size: var(--text-small);
+  }
+  .corrected,
+  .inactive {
+    font-size: var(--text-small);
+    color: var(--color-text-muted);
+  }
+  .who a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .meta {
+    display: block;
+    margin-top: var(--space-1);
+    font-size: var(--text-caption);
+    color: var(--color-text-muted);
+  }
+  .narrow-only {
+    display: none;
+  }
+  /* Phones: mobile browsers zoom the whole page out to fit a wide table, even
+     inside a scroll box, so the table has to fit. When and By move under the
+     reason. */
+  @media (max-width: 720px) {
+    .wide-only {
+      display: none;
+    }
+    .narrow-only {
+      display: block;
+    }
+    .reason {
+      min-width: 0;
+    }
+  }
+</style>
