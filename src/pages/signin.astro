@@ -24,7 +24,18 @@ if (Astro.request.method === 'POST') {
   } else if (!email || typeof password !== 'string' || !password) {
     error = 'Enter your email and password.';
   } else {
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    // TEMP signin-debug: remove once preview sign-in is fixed.
+    console.log('[signin-debug]', 'signInWithPassword', JSON.stringify({
+      emailDomain: email.split('@')[1] ?? null,
+      ok: !authError,
+      hasSession: Boolean(authData?.session),
+      userId: authData?.user?.id ?? null,
+      errorCode: authError?.code ?? null,
+      errorStatus: authError?.status ?? null,
+      errorMessage: authError?.message ?? null,
+      next,
+    }));
     if (!authError) return Astro.redirect(next);
     error =
       authError.code === 'email_not_confirmed'
