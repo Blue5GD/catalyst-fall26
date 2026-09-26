@@ -46,6 +46,10 @@ src/lib/                 Helpers: loading members, Supabase client, sign-in rule
 src/middleware.ts        Runs before every on-demand page; works out who's signed in
 src/content.config.ts    The fields allowed in members/*.json
 src/styles/global.css    Colors, type and shared styles, from DESIGN.md
+src/lib/guards.ts        Sign-in and admin checks for pages
+src/lib/points-form.ts   The admin points form and points formatting
+src/pages/me.astro       Your points and history
+src/pages/admin/         Admin pages (leads only)
 scripts/check-members.mjs  Checks every profile in members/
 scripts/check-pr-scope.mjs Checks a participant's PR only touches their own profile
 scripts/check-matches.mjs  Compares profiles with sign-ups (leads run it by hand)
@@ -69,3 +73,5 @@ npm run build           # make sure the site builds
 All four run on every pull request (`.github/workflows/check-members.yml`), in two jobs: **Profiles** and **Build**. The `check:pr` step is skipped for leads (repo owners, members and collaborators), whose PRs can change anything. `main` requires both jobs to pass before a merge.
 
 `npm run check:matches` isn't part of CI. It compares `members/` with the accounts in Supabase (see [docs/LEADS.md](docs/LEADS.md)).
+
+`npm test` runs the unit tests in `src/lib/*.test.ts`. `npx supabase test db` runs the database tests in `supabase/tests/` against local Supabase (`npx supabase start` first; it needs Docker).
