@@ -27,3 +27,6 @@ pnpm-debug.log*
 .idea/
 .vercel
 skills-lock.json
+
+# design specs and implementation plans
+docs/superpowers/

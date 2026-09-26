@@ -27,6 +27,8 @@ FOR PRODUCT DIRECTION:
 FOR ANY DESIGN WORK:
 @DESIGN.md
 
+Never mention Claude or Anthropic in commit messages.
+
 
 
 ## Project rules

@@ -14,6 +14,16 @@ If the checks say "awaiting approval", click **Approve and run**. GitHub holds r
 
 Merging deploys the site automatically. The profile shows up within a few minutes.
 
+### Check that profiles match sign-ups
+
+The leaderboard finds each person's photo by NetID, so a typo in either place leaves them with a grey square. Every few days, run:
+
+```bash
+npm run check:matches
+```
+
+It lists likely NetID typos, sign-ups with no profile yet, profiles with no sign-up yet, and people whose sign-up name differs from their profile. Fix a typo in whichever place is wrong: rename the files in a PR, or edit `netid` in the `participants` table. Accounts marked inactive don't show up in the report.
+
 ## Points
 
 Points live in the `point_entries` table. Each row is one award, and the leaderboard adds them up.

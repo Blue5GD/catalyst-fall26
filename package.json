@@ -12,7 +12,8 @@
     "astro": "astro",
     "check:members": "node scripts/check-members.mjs",
     "check": "astro check",
-    "check:pr": "node scripts/check-pr-scope.mjs"
+    "check:pr": "node scripts/check-pr-scope.mjs",
+    "check:matches": "node --env-file-if-exists=.env.local scripts/check-matches.mjs"
   },
   "dependencies": {
     "@astrojs/vercel": "^11.0.11",
