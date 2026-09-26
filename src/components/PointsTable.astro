@@ -24,10 +24,10 @@ const correctHref = (row: PointRow | RecentRow) => {
   <table class="table points-table">
     <thead>
       <tr>
-        <th scope="col">When</th>
+        <th scope="col" class="wide-only">When</th>
         {showWho && <th scope="col">Who</th>}
         <th scope="col">Reason</th>
-        {showBy && <th scope="col">By</th>}
+        {showBy && <th scope="col" class="wide-only">By</th>}
         <th scope="col" class="num">Points</th>
         {showCorrect && <th scope="col"><span class="visually-hidden">Actions</span></th>}
       </tr>
@@ -36,14 +36,19 @@ const correctHref = (row: PointRow | RecentRow) => {
       {
         rows.map((row) => (
           <tr>
-            <td class="num when">{formatDate(row.created_at, showBy)}</td>
+            <td class="num when wide-only">{formatDate(row.created_at, showBy)}</td>
             {showWho && 'netid' in row && (
-              <td>
+              <td class="who">
                 <a href={`/admin/people/${row.netid}`}>{row.name}</a>
               </td>
             )}
-            <td class="reason">{row.reason}</td>
-            {showBy && <td class="by">{row.created_by ?? '—'}</td>}
+            <td class="reason">
+              {row.reason}
+              <span class="meta narrow-only">
+                {formatDate(row.created_at, showBy)}{showBy && row.created_by && ` · ${row.created_by}`}
+              </span>
+            </td>
+            {showBy && <td class="by wide-only">{row.created_by ?? '—'}</td>}
             <td class:list={['num', row.amount < 0 ? 'neg' : 'pos']}>{formatPoints(row.amount)}</td>
             {showCorrect && (
               <td class="action">
@@ -82,5 +87,33 @@ const correctHref = (row: PointRow | RecentRow) => {
     align-items: center;
     min-height: 44px;
     font-size: var(--text-small);
+  }
+  .who a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .meta {
+    display: block;
+    margin-top: var(--space-1);
+    font-size: var(--text-caption);
+    color: var(--color-text-muted);
+  }
+  .narrow-only {
+    display: none;
+  }
+  /* Phones: mobile browsers zoom the whole page out to fit a wide table, even
+     inside a scroll box, so the table has to fit. When and By move under the
+     reason. */
+  @media (max-width: 720px) {
+    .wide-only {
+      display: none;
+    }
+    .narrow-only {
+      display: block;
+    }
+    .reason {
+      min-width: 0;
+    }
   }
 </style>

@@ -49,7 +49,7 @@ const member = (await getMembers()).find((m) => m.netid === user.netid);
         </div>
       </dl>
     </div>
-    <div class="profile-photo">
+    <div class:list={['profile-photo', { 'has-photo': member?.photo }]}>
       {
         member?.photo ? (
           <Image src={member.photo} alt={user.name} width={480} height={480} fit="cover" class="photo" />
@@ -131,7 +131,8 @@ const member = (await getMembers()).find((m) => m.netid === user.netid);
       grid-template-columns: 1fr;
       gap: var(--space-5);
     }
-    .profile-photo {
+    /* The photo goes on top; the add-a-photo note stays below the name. */
+    .has-photo {
       order: -1;
     }
     .history {
