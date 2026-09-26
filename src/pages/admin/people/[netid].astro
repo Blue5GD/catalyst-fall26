@@ -1,0 +1,80 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import PointsTable from '../../../components/PointsTable.astro';
+import { requireAdmin } from '../../../lib/guards';
+import { NETID_PATTERN } from '../../../lib/auth';
+import type { PointRow } from '../../../lib/points-form';
+
+export const prerender = false;
+
+const gate = requireAdmin(Astro);
+if (gate instanceof Response) return gate;
+const forbidden = gate === 'forbidden';
+if (forbidden) Astro.response.status = 403;
+
+const netid = (Astro.params.netid ?? '').toLowerCase();
+let person: { id: string; name: string; netid: string } | null = null;
+let rows: PointRow[] = [];
+let historyError = false;
+
+if (!forbidden && NETID_PATTERN.test(netid)) {
+  const { supabase } = gate;
+  const { data } = await supabase.from('participants').select('id, name, netid').eq('netid', netid).maybeSingle();
+  person = data;
+  if (person) {
+    const history = await supabase.rpc('point_history', { p_participant: person.id });
+    if (history.error) console.error('Failed to load points history:', history.error);
+    rows = (history.data ?? []) as PointRow[];
+    historyError = Boolean(history.error);
+  }
+}
+if (!forbidden && !person) Astro.response.status = 404;
+
+const earned = rows.reduce((sum, r) => sum + r.amount, 0);
+---
+
+<BaseLayout title={person ? person.name : 'Admin'}>
+  <section class="page person">
+    {
+      forbidden ? (
+        <p class="page-intro">This page is for Catalyst leads.</p>
+      ) : !person ? (
+        <Fragment>
+          <h2>Not found</h2>
+          <p class="page-intro">No participant with NetID {netid}. <a href="/admin">Back to admin</a></p>
+        </Fragment>
+      ) : (
+        <Fragment>
+          <p class="label"><a href="/admin">Admin</a> · {person.netid}</p>
+          <h2>{person.name}</h2>
+          <p class="earned"><span class="label">Earned</span> <span class="num">{earned}</span></p>
+          {historyError ? (
+            <p class="page-intro">This history couldn't load. Try again in a minute.</p>
+          ) : rows.length === 0 ? (
+            <p class="page-intro">No points yet.</p>
+          ) : (
+            <PointsTable rows={rows} showBy correctFor={person.id} />
+          )}
+        </Fragment>
+      )
+    }
+  </section>
+</BaseLayout>
+
+<style>
+  .person {
+    display: grid;
+    gap: var(--space-4);
+  }
+  .earned {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+  }
+  .earned .num {
+    font-size: var(--text-heading);
+    font-weight: 700;
+    color: var(--color-text);
+  }
+</style>
