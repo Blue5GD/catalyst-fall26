@@ -2,7 +2,7 @@
 -- Run with: npx supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(17);
 
 -- The sign-up trigger creates a participants row for each of these. Names and
 -- emails are unusual so they can't clash with accounts already in the database.
@@ -114,6 +114,17 @@ select is(
   (select count(*)::integer from public.point_history('00000000-0000-0000-0000-00000000000c')),
   0,
   'a participant cannot read someone else''s history'
+);
+
+-- A deactivated admin -----------------------------------------------------------
+reset role;
+update public.participants set active = false where netid = 'zzlead';
+select pg_temp.act_as('00000000-0000-0000-0000-00000000000a');
+set local role authenticated;
+select throws_ok(
+  $$select public.add_point_entries(array['00000000-0000-0000-0000-00000000000b']::uuid[], 1, 'x', 'award')$$,
+  'P0001', 'Only Catalyst leads can add points.',
+  'a deactivated admin cannot add points'
 );
 
 -- Visitors ---------------------------------------------------------------------

@@ -292,6 +292,9 @@ const signed = Number.isInteger(points) && points >= 1 && points <= MAX_POINTS
 <style>
   .admin {
     display: grid;
+    /* minmax(0, …) lets the recent-entries table scroll inside its box on phones
+       instead of widening the whole page. */
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-8);
   }
   .block {

@@ -10,6 +10,7 @@ import {
   parseAwardForm,
   parseCorrectId,
   peopleSummary,
+  shownRank,
 } from './points-form.ts';
 
 const A = '00000000-0000-0000-0000-00000000000a';
@@ -120,4 +121,10 @@ test('addedMessage reads the redirect query', () => {
   assert.equal(addedMessage(new URLSearchParams('added=1&amount=-2')), 'Added −2 to 1 person.');
   assert.equal(addedMessage(new URLSearchParams('added=abc&amount=3')), null);
   assert.equal(addedMessage(new URLSearchParams('')), null);
+});
+
+test('shownRank hides the rank until someone has points', () => {
+  assert.equal(shownRank(0, 1), null);
+  assert.equal(shownRank(5, 3), 3);
+  assert.equal(shownRank(5, null), null);
 });

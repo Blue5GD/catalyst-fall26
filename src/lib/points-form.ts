@@ -156,6 +156,11 @@ export function peopleSummary(names: string[], amount: number | null): string {
   return `${formatPoints(amount)} to ${who}`;
 }
 
+/** The rank to show on /me. Before any points everyone ties for 1st, which says nothing. */
+export function shownRank(earned: number, rank: number | null): number | null {
+  return earned > 0 ? rank : null;
+}
+
 export function buttonLabel(count: number): string {
   if (count === 0) return 'Add entries';
   return count === 1 ? 'Add 1 entry' : `Add ${count} entries`;

@@ -10,6 +10,7 @@
 -- Signed-in pages need to know who's an admin. Visitors still can't see roles.
 grant select (role) on public.participants to authenticated;
 
+-- A deactivated admin loses admin rights, even with a session still open.
 create function private.is_admin()
 returns boolean
 language sql
@@ -18,7 +19,7 @@ security definer
 set search_path = ''
 as $$
   select coalesce(
-    (select p.role = 'admin' from public.participants p where p.id = auth.uid()),
+    (select p.role = 'admin' and p.active from public.participants p where p.id = auth.uid()),
     false
   );
 $$;
