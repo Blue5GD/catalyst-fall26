@@ -110,8 +110,8 @@ select is(
   'the person is in the group they were moved to'
 );
 select lives_ok(
-  $$select public.move_to_group(pg_temp.sprint('project-1'), '00000000-0000-0000-0000-000000000101', 4)$$,
-  'moving to the next number makes a new group'
+  $$select public.move_to_group(pg_temp.sprint('project-1'), '00000000-0000-0000-0000-000000000101', null, true)$$,
+  'moving to a new group makes one'
 );
 select is(
   (select count(*)::int from public.groups where sprint_id = pg_temp.sprint('project-1')),
@@ -119,8 +119,9 @@ select is(
   'the new group exists'
 );
 select throws_ok(
-  $$select public.move_to_group(pg_temp.sprint('project-1'), '00000000-0000-0000-0000-000000000101', 6)$$,
-  'P0001', 'That group doesn''t exist. Reload the page and pick again.', 'a skipped group number is refused'
+  $$select public.move_to_group(pg_temp.sprint('project-1'), '00000000-0000-0000-0000-000000000101', 5)$$,
+  'P0001', 'That group doesn''t exist. Reload the page and pick again.',
+  'a group number that doesn''t exist is refused, even the next one (a stale "New group" pick)'
 );
 select lives_ok(
   $$select public.move_to_group(pg_temp.sprint('project-1'), '00000000-0000-0000-0000-000000000101', null)$$,
@@ -178,7 +179,7 @@ select results_eq(
   'other groups keep their numbers when one empties'
 );
 select lives_ok(
-  $$select public.move_to_group(pg_temp.sprint('project-1'), '00000000-0000-0000-0000-000000000101', 4)$$,
+  $$select public.move_to_group(pg_temp.sprint('project-1'), '00000000-0000-0000-0000-000000000101', null, true)$$,
   'a new group takes the number above the highest'
 );
 select results_eq(

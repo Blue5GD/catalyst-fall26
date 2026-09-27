@@ -34,7 +34,8 @@ export interface Group {
 
 export type GroupAction =
   | { action: 'generate'; size: number }
-  | { action: 'move'; participantId: string; groupNumber: number | null }
+  /** groupNumber 'new' starts a new group; null takes them out of their group. */
+  | { action: 'move'; participantId: string; groupNumber: number | 'new' | null }
   | { action: 'publish' };
 
 const newHavenDate = new Intl.DateTimeFormat('en-CA', {
@@ -103,6 +104,7 @@ export function parseGroupAction(form: FormData): GroupAction | { error: string 
       if (!isUuid(participantId)) return { error: 'Pick a person to move. Reload the page and try again.' };
       const to = text(form, 'to');
       if (to === 'none') return { action: 'move', participantId: participantId.toLowerCase(), groupNumber: null };
+      if (to === 'new') return { action: 'move', participantId: participantId.toLowerCase(), groupNumber: 'new' };
       if (!/^[1-9]\d{0,3}$/.test(to)) return { error: 'Pick a group to move them to.' };
       return { action: 'move', participantId: participantId.toLowerCase(), groupNumber: Number(to) };
     }
@@ -138,6 +140,11 @@ export function arrangeGroups(
   return { groups: arranged, unassigned: people.filter((p) => !placed.has(p.id)) };
 }
 
+/** Participants in no group: late sign-ups. Leads are left out; they aren't shuffled in. */
+export function lateSignUps(unassigned: Person[]): number {
+  return unassigned.filter((p) => p.role === 'participant').length;
+}
+
 export function groupOf(groups: Group[], participantId: string): Group | null {
   return groups.find((g) => g.members.some((m) => m.id === participantId)) ?? null;
 }
@@ -170,6 +177,7 @@ export function groupsDoneMessage(params: URLSearchParams, people: Person[]): st
       const to = params.get('to') ?? '';
       if (!person) return null;
       if (to === 'none') return `Removed ${person.name} from their group.`;
+      if (to === 'new') return `Moved ${person.name} to a new group.`;
       return /^[1-9]\d{0,3}$/.test(to) ? `Moved ${person.name} to Group ${to}.` : null;
     }
     default:

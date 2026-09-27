@@ -159,10 +159,17 @@ begin
 end;
 $$;
 
--- Moves one person, in a draft or after publishing. p_group_number null takes
--- them out of their group; the next number after the highest makes a new
--- group. Any group left empty is deleted.
-create function public.move_to_group(p_sprint bigint, p_participant uuid, p_group_number integer)
+-- Moves one person, in a draft or after publishing. p_new_group puts them in a
+-- new group numbered after the highest; otherwise p_group_number must be an
+-- existing group, or null to take them out of their group. The database picks
+-- the new number so two leads can't both claim it. Any group left empty is
+-- deleted.
+create function public.move_to_group(
+  p_sprint bigint,
+  p_participant uuid,
+  p_group_number integer,
+  p_new_group boolean default false
+)
 returns void
 language plpgsql
 security definer
@@ -177,18 +184,19 @@ begin
     raise exception 'That person isn''t an active participant. Reload the page and pick again.';
   end if;
 
-  if p_group_number is null then
-    delete from public.group_members m where m.sprint_id = p_sprint and m.participant_id = p_participant;
-  else
+  if coalesce(p_new_group, false) then
+    select coalesce(max(g.number), 0) + 1 into next_number from public.groups g where g.sprint_id = p_sprint;
+    insert into public.groups (sprint_id, number) values (p_sprint, next_number) returning id into target_id;
+  elsif p_group_number is not null then
     select g.id into target_id from public.groups g where g.sprint_id = p_sprint and g.number = p_group_number;
     if target_id is null then
-      select coalesce(max(g.number), 0) + 1 into next_number from public.groups g where g.sprint_id = p_sprint;
-      if p_group_number <> next_number then
-        raise exception 'That group doesn''t exist. Reload the page and pick again.';
-      end if;
-      insert into public.groups (sprint_id, number) values (p_sprint, p_group_number) returning id into target_id;
+      raise exception 'That group doesn''t exist. Reload the page and pick again.';
     end if;
+  end if;
 
+  if target_id is null then
+    delete from public.group_members m where m.sprint_id = p_sprint and m.participant_id = p_participant;
+  else
     insert into public.group_members (sprint_id, group_id, participant_id)
     values (p_sprint, target_id, p_participant)
     on conflict (sprint_id, participant_id) do update set group_id = excluded.group_id;
@@ -224,9 +232,9 @@ $$;
 
 revoke execute on function private.lock_sprint_for_admin(bigint) from public, anon, authenticated;
 revoke execute on function public.generate_groups(bigint, integer) from public, anon;
-revoke execute on function public.move_to_group(bigint, uuid, integer) from public, anon;
+revoke execute on function public.move_to_group(bigint, uuid, integer, boolean) from public, anon;
 revoke execute on function public.publish_groups(bigint) from public, anon;
 
 grant execute on function public.generate_groups(bigint, integer) to authenticated;
-grant execute on function public.move_to_group(bigint, uuid, integer) to authenticated;
+grant execute on function public.move_to_group(bigint, uuid, integer, boolean) to authenticated;
 grant execute on function public.publish_groups(bigint) to authenticated;

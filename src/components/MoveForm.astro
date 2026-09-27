@@ -8,12 +8,10 @@ interface Props {
   current: number | null;
   /** Every group number in the sprint. */
   numbers: number[];
-  /** The number "New group" creates. */
-  next: number;
   action: string;
 }
 
-const { person, current, numbers, next, action } = Astro.props;
+const { person, current, numbers, action } = Astro.props;
 const id = `to-${person.id}`;
 ---
 
@@ -23,7 +21,7 @@ const id = `to-${person.id}`;
   <label class="visually-hidden" for={id}>Move {person.name} to</label>
   <select class="input" id={id} name="to">
     {numbers.map((n) => <option value={n} selected={n === current}>Group {n}</option>)}
-    <option value={next}>New group</option>
+    <option value="new">New group</option>
     <option value="none" selected={current === null}>No group</option>
   </select>
   <button type="submit" class="btn btn--secondary">Move</button>

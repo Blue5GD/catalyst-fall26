@@ -77,7 +77,7 @@ Groups are made per sprint at `/admin/groups` (linked from `/admin`). Nobody els
 ### After publishing
 
 - You can still move people, but you can't reshuffle. Group numbers never change, so if Group 2 empties, the others keep their numbers.
-- **Late sign-ups** show under **Unassigned** (the count turns peach). Move them into a group.
+- **Late sign-ups** show under **Unassigned**, and the count turns peach while any participant is left out. Leads listed there don't turn it peach. Move them into a group.
 - To unpublish in an emergency: **Table Editor → sprints**, find the sprint and clear `groups_published_at`.
 
 ## Accounts

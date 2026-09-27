@@ -7,6 +7,7 @@ import {
   groupOf,
   groupSizes,
   groupsDoneMessage,
+  lateSignUps,
   parseGroupAction,
   sizePreview,
   sprintNumber,
@@ -77,6 +78,11 @@ test('parseGroupAction reads move to a group or to no group', () => {
     action: 'move',
     participantId: A,
     groupNumber: 3,
+  });
+  assert.deepEqual(parseGroupAction(form({ action: 'move', participant: A, to: 'new' })), {
+    action: 'move',
+    participantId: A,
+    groupNumber: 'new',
   });
   assert.deepEqual(parseGroupAction(form({ action: 'move', participant: A, to: 'none' })), {
     action: 'move',
@@ -158,7 +164,14 @@ test('groupsDoneMessage confirms each action from the redirect URL', () => {
   assert.equal(msg('done=publish'), 'Groups published. Participants can see them now.');
   assert.equal(msg(`done=move&who=${A}&to=3`), 'Moved Ada to Group 3.');
   assert.equal(msg(`done=move&who=${A}&to=none`), 'Removed Ada from their group.');
+  assert.equal(msg(`done=move&who=${A}&to=new`), 'Moved Ada to a new group.');
   assert.equal(msg('done=move&who=nobody&to=3'), null);
   assert.equal(msg('done=generate&n=lots'), null);
   assert.equal(msg(''), null);
+});
+
+test('lateSignUps counts unassigned participants, not leads', () => {
+  // Leads aren't shuffled in, so counting them would keep the warning on forever.
+  assert.equal(lateSignUps(people), 2);
+  assert.equal(lateSignUps(people.filter((p) => p.role === 'admin')), 0);
 });
