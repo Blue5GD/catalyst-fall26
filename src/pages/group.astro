@@ -1,0 +1,154 @@
+---
+import { Image } from 'astro:assets';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { requireUser } from '../lib/guards';
+import { getMembers } from '../lib/members';
+import { loadGroups, loadSprints } from '../lib/groups-data';
+import { currentSprint, dateRange, groupOf, sprintNumber, todayInNewHaven, type Group } from '../lib/groups';
+
+export const prerender = false;
+
+const gate = requireUser(Astro);
+if (gate instanceof Response) return gate;
+const { user, supabase } = gate;
+
+const { sprints, error: sprintsError } = await loadSprints(supabase);
+const sprint = currentSprint(sprints, todayInNewHaven());
+const published = Boolean(sprint?.groups_published_at);
+
+let groups: Group[] = [];
+let groupsError = false;
+if (sprint && published) ({ groups, error: groupsError } = await loadGroups(supabase, sprint.id));
+
+const mine = groupOf(groups, user.id);
+const photos = new Map((await getMembers()).map((m) => [m.netid, m.photo]));
+---
+
+<BaseLayout title="Group">
+  <section class="page">
+    {sprint && <p class="label sprint">{`${sprintNumber(sprint.number)} · ${sprint.title} · ${dateRange(sprint)}`}</p>}
+    <h2>{mine ? `Group ${mine.number}` : 'Your group'}</h2>
+    {
+      sprintsError || groupsError ? (
+        <p class="page-intro">Groups couldn't load. Try again in a minute.</p>
+      ) : !sprint ? (
+        <p class="page-intro">No sprint is running right now.</p>
+      ) : !published ? (
+        <p class="page-intro">
+          {user.role === 'admin' ? (
+            <Fragment>Groups aren't published yet. <a href="/admin/groups">Manage them in Admin.</a></Fragment>
+          ) : (
+            'Groups are announced at kickoff.'
+          )}
+        </p>
+      ) : mine ? (
+        <ul class="grid">
+          {mine.members.map((m) => {
+            const photo = photos.get(m.netid);
+            return (
+              <li>
+                {photo ? (
+                  <Image src={photo} alt={m.name} width={400} height={400} fit="cover" class="photo" />
+                ) : (
+                  <div class="photo photo--missing" aria-hidden="true" />
+                )}
+                <h4>{m.name}</h4>
+                {m.id === user.id && <p class="label you">You</p>}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p class="page-intro">You're not in a group yet. Ask a lead to add you.</p>
+      )
+    }
+  </section>
+
+  {
+    published && groups.length > 0 && (
+      <section class="all">
+        <h3>All groups</h3>
+        <ul class="rows">
+          {groups.map((g) => (
+            <li class:list={['row', { mine: g.number === mine?.number }]}>
+              <span class="row-name">Group {g.number}</span>
+              <span class="row-members">{g.members.map((m) => m.name).join(', ')}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+</BaseLayout>
+
+<style>
+  .sprint {
+    margin-bottom: var(--space-3);
+    color: var(--color-text-muted);
+  }
+  /* Four-column layout slide: one column per member (DESIGN.md §6). */
+  .grid {
+    list-style: none;
+    margin: var(--space-7) 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-6) var(--space-5);
+  }
+  .photo {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: var(--radius);
+  }
+  .photo--missing {
+    background: var(--color-line);
+  }
+  h4 {
+    margin-top: var(--space-3);
+  }
+  .you {
+    margin-top: var(--space-1);
+    color: var(--color-text-muted);
+  }
+  .all {
+    display: grid;
+    gap: var(--space-5);
+    margin-top: var(--space-8);
+  }
+  .rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-3);
+    border-bottom: var(--line);
+    font-size: var(--text-small);
+  }
+  .row.mine {
+    box-shadow: inset 2px 0 0 var(--color-accent);
+  }
+  .row-name {
+    color: var(--color-text);
+    font-weight: 500;
+  }
+  @media (max-width: 720px) {
+    .grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-5) var(--space-4);
+    }
+    .all {
+      margin-top: var(--space-7);
+    }
+    .row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-1);
+    }
+  }
+</style>
