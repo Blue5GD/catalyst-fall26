@@ -31,7 +31,7 @@ Points live in the `point_entries` table. Each row is one award, and the leaderb
 ### Award points
 
 1. Go to `/admin` on the site. Only accounts with `role` set to `admin` can open it.
-2. Pick one or more people, the points (1 to 100), and a short, specific reason like "Won the Project 1 design challenge".
+2. Pick one or more people, the points (1 to 100), and a short, specific reason like "Won the Project 1 design challenge". To award a whole group, type its number ("4" or "Group 4") and pick it: everyone in that group this sprint is added at once, and you can still remove anyone who shouldn't get the points.
 3. Choose **Award** for challenge or project prizes, or **Correction** when you're fixing a mistake.
 
 The reason shows in each person's points history. The site records your NetID as the person who awarded the points.
