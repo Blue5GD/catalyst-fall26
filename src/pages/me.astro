@@ -5,6 +5,8 @@ import PointsTable from '../components/PointsTable.astro';
 import { requireUser } from '../lib/guards';
 import { getMembers } from '../lib/members';
 import { shownRank, type PointRow } from '../lib/points-form';
+import { loadMyGroupNumber, loadSprints } from '../lib/groups-data';
+import { currentSprint, todayInNewHaven } from '../lib/groups';
 
 export const prerender = false;
 
@@ -29,6 +31,11 @@ const earned = standing.data?.earned ?? rows.reduce((sum, r) => sum + r.amount, 
 const rank = shownRank(earned, standing.data?.rank ?? null);
 const total = everyone.count ?? null;
 const member = (await getMembers()).find((m) => m.netid === user.netid);
+
+// Your group this sprint, once it's published.
+const { sprints } = await loadSprints(supabase);
+const sprint = currentSprint(sprints, todayInNewHaven());
+const myGroup = sprint?.groups_published_at ? await loadMyGroupNumber(supabase, sprint.id, user.id) : null;
 ---
 
 <BaseLayout title="You">
@@ -48,6 +55,9 @@ const member = (await getMembers()).find((m) => m.netid === user.netid);
           </dd>
         </div>
       </dl>
+      {myGroup && sprint && (
+        <p class="group-line"><a href="/group">Group {myGroup} · {sprint.title}</a></p>
+      )}
     </div>
     <div class:list={['profile-photo', { 'has-photo': member?.photo }]}>
       {
@@ -105,6 +115,11 @@ const member = (await getMembers()).find((m) => m.netid === user.netid);
     font-weight: 500;
     line-height: 1;
     color: var(--color-text);
+  }
+  .group-line {
+    margin-top: var(--space-4);
+    font-size: var(--text-small);
+    font-weight: 500;
   }
   .of {
     font-size: var(--text-small);

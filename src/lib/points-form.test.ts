@@ -7,7 +7,9 @@ import {
   correctionValues,
   formatDate,
   formatPoints,
+  groupChoiceLabel,
   isUuid,
+  matchingGroup,
   parseAwardForm,
   parseCorrectId,
   peopleSummary,
@@ -152,6 +154,31 @@ test('peopleSummary', () => {
   assert.equal(peopleSummary(['Maya Chen', 'Sam Okafor'], -2), '−2 to Maya Chen and Sam Okafor');
   assert.equal(peopleSummary(['A', 'B', 'C'], 1), '+1 to A, B and C');
   assert.equal(peopleSummary(['A', 'B', 'C', 'D', 'E'], 1), '+1 to A, B and 3 others');
+});
+
+test('peopleSummary names the group when the picks are exactly one group', () => {
+  assert.equal(peopleSummary(['A', 'B', 'C'], 2, 4), '+2 to Group 4 (3 people)');
+  assert.equal(peopleSummary(['A'], -1, 7), '−1 to Group 7 (1 person)');
+  assert.equal(peopleSummary(['A'], null, 7), '');
+});
+
+const C = '00000000-0000-0000-0000-00000000000c';
+const groups = [
+  { number: 4, memberIds: [A, B], names: ['Ada', 'Ben'] },
+  { number: 5, memberIds: [C], names: ['Cy'] },
+];
+
+test('groupChoiceLabel lists the members after the number', () => {
+  assert.equal(groupChoiceLabel(groups[0]), 'Group 4 · Ada, Ben');
+});
+
+test('matchingGroup finds the group whose members are exactly the picks', () => {
+  assert.equal(matchingGroup([B, A], groups), 4);
+  assert.equal(matchingGroup([C], groups), 5);
+  // A missing or extra person means it's no longer "the group".
+  assert.equal(matchingGroup([A], groups), null);
+  assert.equal(matchingGroup([A, B, C], groups), null);
+  assert.equal(matchingGroup([], [{ number: 9, memberIds: [], names: [] }]), null);
 });
 
 test('buttonLabel', () => {

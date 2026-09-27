@@ -167,9 +167,15 @@ export function formatDate(iso: string, withTime = false): string {
   return (withTime ? dateTime : dateOnly).format(new Date(iso));
 }
 
-/** "+3 to Maya Chen and Sam Okafor". Empty when there's nothing to say yet. */
-export function peopleSummary(names: string[], amount: number | null): string {
+/**
+ * "+3 to Maya Chen and Sam Okafor", or "+3 to Group 4 (3 people)" when the
+ * picks are exactly one group. Empty when there's nothing to say yet.
+ */
+export function peopleSummary(names: string[], amount: number | null, groupNumber: number | null = null): string {
   if (names.length === 0 || amount === null) return '';
+  if (groupNumber !== null) {
+    return `${formatPoints(amount)} to Group ${groupNumber} (${names.length} ${names.length === 1 ? 'person' : 'people'})`;
+  }
   let who: string;
   if (names.length === 1) who = names[0];
   else if (names.length <= 3) who = `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
@@ -194,4 +200,25 @@ export function addedMessage(params: URLSearchParams): string | null {
   if (!/^\d{1,3}$/.test(added) || !/^-?\d{1,6}$/.test(amount)) return null;
   const n = Number(added);
   return `Added ${formatPoints(Number(amount))} to ${n} ${n === 1 ? 'person' : 'people'}.`;
+}
+
+/** A group the People picker offers, so a whole group can be picked at once. */
+export interface GroupChoice {
+  number: number;
+  memberIds: string[];
+  names: string[];
+}
+
+/** "Group 4 · Ada Lee, Ben Park" */
+export function groupChoiceLabel(group: GroupChoice): string {
+  return `Group ${group.number} · ${group.names.join(', ')}`;
+}
+
+/** The group whose members are exactly these people, or null. */
+export function matchingGroup(pickedIds: string[], groups: GroupChoice[]): number | null {
+  const picked = new Set(pickedIds);
+  const match = groups.find(
+    (g) => g.memberIds.length > 0 && g.memberIds.length === picked.size && g.memberIds.every((id) => picked.has(id)),
+  );
+  return match?.number ?? null;
 }

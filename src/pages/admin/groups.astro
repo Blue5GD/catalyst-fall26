@@ -1,0 +1,416 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import MoveForm from '../../components/MoveForm.astro';
+import Toast from '../../components/Toast.astro';
+import { requireAdmin } from '../../lib/guards';
+import { formatDate } from '../../lib/points-form';
+import { loadGroups, loadSprints } from '../../lib/groups-data';
+import {
+  DEFAULT_GROUP_SIZE,
+  MAX_GROUP_SIZE,
+  MIN_GROUP_SIZE,
+  currentSprint,
+  dateRange,
+  groupsDoneMessage,
+  lateSignUps,
+  parseGroupAction,
+  sizePreview,
+  sprintNumber,
+  todayInNewHaven,
+  type Group,
+  type Person,
+  type Sprint,
+} from '../../lib/groups';
+
+export const prerender = false;
+
+const gate = requireAdmin(Astro);
+if (gate instanceof Response) return gate;
+const forbidden = gate === 'forbidden';
+if (forbidden) Astro.response.status = 403;
+
+let sprints: Sprint[] = [];
+let sprint: Sprint | null = null;
+let groups: Group[] = [];
+let unassigned: Person[] = [];
+let people: Person[] = [];
+let loadError = false;
+let actionError = '';
+let size = String(DEFAULT_GROUP_SIZE);
+let toast: string | null = null;
+
+if (!forbidden) {
+  const { supabase } = gate;
+  const loaded = await loadSprints(supabase);
+  sprints = loaded.sprints;
+  loadError = loaded.error;
+  const slug = Astro.url.searchParams.get('sprint');
+  sprint = sprints.find((s) => s.slug === slug) ?? currentSprint(sprints, todayInNewHaven());
+
+  if (sprint && Astro.request.method === 'POST') {
+    const parsed = parseGroupAction(await Astro.request.formData());
+    if ('error' in parsed) {
+      actionError = parsed.error;
+    } else {
+      if (parsed.action === 'generate') size = String(parsed.size);
+      const { data, error } =
+        parsed.action === 'generate'
+          ? await supabase.rpc('generate_groups', { p_sprint: sprint.id, p_size: parsed.size })
+          : parsed.action === 'move'
+            ? await supabase.rpc('move_to_group', {
+                p_sprint: sprint.id,
+                p_participant: parsed.participantId,
+                p_group_number: typeof parsed.groupNumber === 'number' ? parsed.groupNumber : null,
+                p_new_group: parsed.groupNumber === 'new',
+              })
+            : await supabase.rpc('publish_groups', { p_sprint: sprint.id });
+      // Post/redirect/get: a refresh can't run the action twice.
+      if (!error) {
+        const done =
+          parsed.action === 'generate'
+            ? `done=generate&n=${data}`
+            : parsed.action === 'move'
+              ? `done=move&who=${parsed.participantId}&to=${parsed.groupNumber ?? 'none'}`
+              : 'done=publish';
+        return Astro.redirect(`/admin/groups?sprint=${sprint.slug}&${done}`, 303);
+      }
+      console.error(`${parsed.action} failed:`, error);
+      // P0001 is a message the database wrote for people. Anything else isn't.
+      actionError = error.code === 'P0001' ? error.message : "Couldn't save that. Nothing changed. Try again in a minute.";
+    }
+  }
+
+  if (sprint) {
+    const result = await loadGroups(supabase, sprint.id);
+    ({ groups, unassigned, people } = result);
+    loadError ||= result.error;
+    if (Astro.request.method === 'GET') toast = groupsDoneMessage(Astro.url.searchParams, people);
+  }
+}
+
+const published = Boolean(sprint?.groups_published_at);
+const formAction = sprint ? `/admin/groups?sprint=${sprint.slug}` : '/admin/groups';
+const numbers = groups.map((g) => g.number);
+const eligible = people.filter((p) => p.role === 'participant').length;
+// Participants in no group: late sign-ups, or people a lead took out.
+const late = lateSignUps(unassigned);
+// Reshuffle defaults to the size of the biggest group now.
+const reshuffleSize = Math.min(
+  MAX_GROUP_SIZE,
+  Math.max(MIN_GROUP_SIZE, ...groups.map((g) => g.members.length)),
+);
+const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_SIZE ? Number(size) : DEFAULT_GROUP_SIZE;
+---
+
+<BaseLayout title="Groups">
+  <section class="page groups-admin">
+    <div class="head">
+      <div class="head-text">
+        <p class="label"><a href="/admin">Admin</a></p>
+        <h2>Groups</h2>
+      </div>
+      {
+        !forbidden && sprints.length > 0 && (
+          <form method="get" action="/admin/groups" class="picker">
+            <label class="field">
+              <span class="label">Sprint</span>
+              <select class="input" name="sprint">
+                {sprints.map((s) => (
+                  <option value={s.slug} selected={s.slug === sprint?.slug}>
+                    {`${sprintNumber(s.number)} · ${s.title}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" class="btn btn--secondary">Show</button>
+          </form>
+        )
+      }
+    </div>
+
+    {
+      forbidden ? (
+        <p class="page-intro">This page is for Catalyst leads.</p>
+      ) : !sprint ? (
+        <p class="page-intro">
+          {loadError ? "Sprints couldn't load. Try again in a minute." : 'No sprints yet. Apply the groups migration.'}
+        </p>
+      ) : (
+        <Fragment>
+          <p class="label status">
+            {dateRange(sprint)}
+            {published && ` · Published ${formatDate(sprint.groups_published_at!, true)}`}
+            {!published && groups.length > 0 && ' · Draft · Only leads can see this'}
+          </p>
+          {actionError && <p class="form-error" role="alert">{actionError}</p>}
+          {loadError && <p class="form-error" role="alert">Groups couldn't load. Try again in a minute.</p>}
+
+          {groups.length === 0 && !published ? (
+            <form method="post" action={formAction} class="form generate" data-busy-form>
+              <input type="hidden" name="action" value="generate" />
+              <label class="field">
+                <span class="label">Group size</span>
+                <input
+                  class="input num"
+                  name="size"
+                  type="number"
+                  min={MIN_GROUP_SIZE}
+                  max={MAX_GROUP_SIZE}
+                  inputmode="numeric"
+                  value={size}
+                  data-size
+                />
+              </label>
+              <p class="preview num" aria-live="polite" data-preview data-eligible={eligible}>
+                {sizePreview(eligible, previewSize)}
+              </p>
+              <div>
+                <button type="submit" class="btn btn--primary">Generate groups</button>
+              </div>
+            </form>
+          ) : (
+            <Fragment>
+              <div class="groups">
+                {groups.map((g) => (
+                  <section class="group" aria-labelledby={`group-${g.number}`}>
+                    <h3 id={`group-${g.number}`} class="group-title">
+                      Group {g.number} <span class="count num">{g.members.length}</span>
+                    </h3>
+                    {g.members.length === 0 ? (
+                      <p class="muted">No active members.</p>
+                    ) : (
+                      <ul class="people">
+                        {g.members.map((p) => (
+                          <li>
+                            <p class="who">
+                              {p.name} <span class="netid">{p.netid}</span>
+                            </p>
+                            <MoveForm person={p} current={g.number} numbers={numbers} action={formAction} />
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                ))}
+              </div>
+
+              <section class="unassigned" aria-labelledby="unassigned">
+                <h3 id="unassigned">
+                  Unassigned{' '}
+                  <span class:list={['count', 'num', { attention: late > 0 }]}>
+                    {unassigned.length}
+                  </span>
+                </h3>
+                {unassigned.length === 0 ? (
+                  <p class="muted">Everyone is in a group.</p>
+                ) : (
+                  <ul class="people people--wide">
+                    {unassigned.map((p) => (
+                      <li>
+                        <p class="who">
+                          {p.name} <span class="netid">{p.netid}{p.role === 'admin' && ' · lead'}</span>
+                        </p>
+                        <MoveForm person={p} current={null} numbers={numbers} action={formAction} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              {!published && (
+                <div class="actions">
+                  <form
+                    method="post"
+                    action={formAction}
+                    class="reshuffle"
+                    data-busy-form
+                    data-confirm="Reshuffle every group? Moves you've made will be lost."
+                  >
+                    <input type="hidden" name="action" value="generate" />
+                    <label class="field">
+                      <span class="label">Group size</span>
+                      <input
+                        class="input num"
+                        name="size"
+                        type="number"
+                        min={MIN_GROUP_SIZE}
+                        max={MAX_GROUP_SIZE}
+                        inputmode="numeric"
+                        value={reshuffleSize}
+                      />
+                    </label>
+                    <button type="submit" class="btn btn--secondary">Reshuffle</button>
+                  </form>
+                  <form
+                    method="post"
+                    action={formAction}
+                    data-busy-form
+                    data-confirm={late > 0 ? `${late} ${late === 1 ? "participant isn't" : "participants aren't"} in a group yet. Publish anyway?` : undefined}
+                  >
+                    <input type="hidden" name="action" value="publish" />
+                    <button type="submit" class="btn btn--primary">Publish groups</button>
+                  </form>
+                </div>
+              )}
+            </Fragment>
+          )}
+        </Fragment>
+      )
+    }
+  </section>
+  <Toast message={toast} clear={['done', 'n', 'who', 'to']} />
+</BaseLayout>
+
+<script>
+  import { MAX_GROUP_SIZE, MIN_GROUP_SIZE, sizePreview } from '../../lib/groups';
+
+  // Ask before a reshuffle throws away moves, and stop double submits.
+  for (const form of document.querySelectorAll<HTMLFormElement>('[data-busy-form]')) {
+    form.addEventListener('submit', (event) => {
+      const question = form.dataset.confirm;
+      if (question && !confirm(question)) {
+        event.preventDefault();
+        return;
+      }
+      for (const button of form.querySelectorAll('button')) button.disabled = true;
+    });
+  }
+
+  const sizeInput = document.querySelector<HTMLInputElement>('[data-size]');
+  const preview = document.querySelector<HTMLElement>('[data-preview]');
+  if (sizeInput && preview) {
+    const eligible = Number(preview.dataset.eligible);
+    sizeInput.addEventListener('input', () => {
+      const n = Number(sizeInput.value);
+      preview.textContent =
+        Number.isInteger(n) && n >= MIN_GROUP_SIZE && n <= MAX_GROUP_SIZE
+          ? sizePreview(eligible, n)
+          : `Group size must be from ${MIN_GROUP_SIZE} to ${MAX_GROUP_SIZE}.`;
+    });
+  }
+</script>
+
+<style>
+  .groups-admin {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: end;
+    gap: var(--space-5);
+  }
+  .head-text {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .head-text a {
+    color: var(--color-text-muted);
+    text-decoration: none;
+  }
+  .picker {
+    display: flex;
+    align-items: end;
+    gap: var(--space-2);
+  }
+  .picker .input {
+    min-height: 44px;
+  }
+  .status {
+    color: var(--color-text-muted);
+  }
+  .preview {
+    min-height: 1.5em;
+    color: var(--color-text);
+    font-size: var(--text-small);
+    font-weight: 500;
+  }
+  .groups {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-6) var(--space-5);
+  }
+  .group,
+  .unassigned {
+    display: grid;
+    align-content: start;
+    gap: var(--space-3);
+    padding-top: var(--space-4);
+    border-top: var(--line);
+  }
+  .group-title {
+    font-size: var(--text-subheading);
+    font-weight: 500;
+  }
+  .count {
+    color: var(--color-text-muted);
+    font-weight: 400;
+  }
+  .count.attention {
+    color: var(--color-accent);
+  }
+  .people {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--space-4);
+  }
+  .people li {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .people--wide {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: var(--space-4) var(--space-5);
+  }
+  .who {
+    color: var(--color-text);
+    font-size: var(--text-small);
+    font-weight: 500;
+  }
+  .netid {
+    color: var(--color-text-muted);
+    font-weight: 400;
+  }
+  .muted {
+    color: var(--color-text-muted);
+    font-size: var(--text-small);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: end;
+    gap: var(--space-5);
+    padding-top: var(--space-5);
+    border-top: var(--line);
+  }
+  .reshuffle {
+    display: flex;
+    align-items: end;
+    gap: var(--space-2);
+  }
+  .reshuffle .input {
+    width: 88px;
+  }
+  @media (max-width: 900px) {
+    .groups {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 720px) {
+    .groups {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .picker {
+      width: 100%;
+    }
+    .picker .field {
+      flex: 1;
+    }
+  }
+</style>

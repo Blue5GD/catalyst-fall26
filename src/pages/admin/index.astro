@@ -11,15 +11,20 @@ import {
   buttonLabel,
   correctionMax,
   correctionValues,
+  groupChoiceLabel,
   isUuid,
+  matchingGroup,
   parseAwardForm,
   parseCorrectId,
   peopleSummary,
   type AwardErrors,
   type AwardFormValues,
+  type GroupChoice,
   type PointRow,
   type RecentRow,
 } from '../../lib/points-form';
+import { loadGroups, loadSprints } from '../../lib/groups-data';
+import { currentSprint, todayInNewHaven } from '../../lib/groups';
 
 export const prerender = false;
 
@@ -27,6 +32,7 @@ interface Person {
   id: string;
   netid: string;
   name: string;
+  role: 'participant' | 'admin';
 }
 
 const gate = requireAdmin(Astro);
@@ -43,6 +49,7 @@ let people: Person[] = [];
 let recent: RecentRow[] = [];
 let recentError = false;
 let toast: string | null = null;
+let groupChoices: GroupChoice[] = [];
 
 if (!forbidden) {
   const { supabase } = gate;
@@ -96,7 +103,7 @@ if (!forbidden) {
   }
 
   const [peopleResult, recentResult] = await Promise.all([
-    supabase.from('participants').select('id, netid, name').eq('active', true).order('name'),
+    supabase.from('participants').select('id, netid, name, role').eq('active', true).order('name'),
     supabase.rpc('recent_point_entries', { p_limit: 50 }),
   ]);
   if (peopleResult.error) console.error('Failed to load participants:', peopleResult.error);
@@ -104,6 +111,16 @@ if (!forbidden) {
   people = (peopleResult.data ?? []) as Person[];
   recent = (recentResult.data ?? []) as RecentRow[];
   recentError = Boolean(recentResult.error);
+
+  // The current sprint's published groups, so a whole group can be picked at
+  // once. Draft numbers can change on a reshuffle, so they aren't offered.
+  const { sprints } = await loadSprints(supabase);
+  const sprint = currentSprint(sprints, todayInNewHaven());
+  if (sprint?.groups_published_at) {
+    groupChoices = (await loadGroups(supabase, sprint.id, people)).groups
+      .filter((g) => g.members.length > 0)
+      .map((g) => ({ number: g.number, memberIds: g.members.map((m) => m.id), names: g.members.map((m) => m.name) }));
+  }
 
   // A correction for someone who has since gone inactive can't be saved.
   const missing = values.participantIds.filter((id) => !people.some((p) => p.id === id));
@@ -124,6 +141,7 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
 <BaseLayout title="Admin">
   <section class="page admin">
     <h2>Admin</h2>
+    {!forbidden && <p class="admin-links"><a href="/admin/groups">Groups</a>: generate, adjust and publish.</p>}
     {
       forbidden ? (
         <p class="page-intro">This page is for Catalyst leads.</p>
@@ -144,13 +162,16 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
                   id="people-search"
                   type="search"
                   list="people-list"
-                  placeholder="Name or NetID"
+                  placeholder="Name, NetID or group number"
                   autocomplete="off"
                   hidden
                   data-people-search
                 />
                 <datalist id="people-list">
                   {people.map((p) => <option value={`${p.name} (${p.netid})`} />)}
+                  {groupChoices.map((g) => (
+                    <option value={groupChoiceLabel(g)} data-group={g.number} data-members={g.memberIds.join(',')} />
+                  ))}
                 </datalist>
                 <select
                   class="input people-select"
@@ -220,7 +241,7 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
                 )}
               </label>
 
-              <p class="summary num" aria-live="polite" data-summary>{peopleSummary(pickedNames, signed)}</p>
+              <p class="summary num" aria-live="polite" data-summary>{peopleSummary(pickedNames, signed, matchingGroup(values.participantIds, groupChoices))}</p>
               {dbError && <p class="form-error" role="alert">{dbError}</p>}
               <div>
                 <button type="submit" class="btn btn--primary" data-submit>
@@ -248,7 +269,7 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
 </BaseLayout>
 
 <script>
-  import { buttonLabel, peopleSummary } from '../../lib/points-form';
+  import { buttonLabel, matchingGroup, peopleSummary } from '../../lib/points-form';
 
   // Turns the plain multi-select into a search box plus removable chips.
   // Without JavaScript the multi-select still works on its own.
@@ -270,6 +291,15 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
     if (select.getAttribute('aria-invalid')) search.setAttribute('aria-invalid', 'true');
 
     const byLabel = new Map([...select.options].map((o) => [o.text, o]));
+    const byId = new Map([...select.options].map((o) => [o.value, o]));
+    // "Group 4 · …" suggestions pick every member at once.
+    const groupOptions = [...form.querySelectorAll<HTMLOptionElement>('option[data-group]')];
+    const groups = groupOptions.map((o) => ({
+      number: Number(o.dataset.group),
+      memberIds: (o.dataset.members ?? '').split(','),
+      names: [],
+    }));
+    const groupByLabel = new Map(groupOptions.map((o, i) => [o.value, groups[i]]));
     const nameOf = (o: HTMLOptionElement) => o.text.replace(/ \([^)]*\)$/, '');
 
     const render = () => {
@@ -292,11 +322,25 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
       const n = Number(pointsInput.value.trim());
       const valid = /^\d{1,6}$/.test(pointsInput.value.trim()) && n >= 1 && n <= Number(pointsInput.dataset.max);
       const amount = valid ? (direction.value === 'remove' ? -n : n) : null;
-      summary.textContent = peopleSummary(picked.map(nameOf), amount);
+      summary.textContent = peopleSummary(
+        picked.map(nameOf),
+        amount,
+        matchingGroup(picked.map((o) => o.value), groups),
+      );
       submit.textContent = buttonLabel(picked.length);
     };
 
     const pick = () => {
+      const group = groupByLabel.get(search.value);
+      if (group) {
+        for (const id of group.memberIds) {
+          const member = byId.get(id);
+          if (member) member.selected = true;
+        }
+        search.value = '';
+        render();
+        return true;
+      }
       const option = byLabel.get(search.value);
       if (!option) return false;
       option.selected = true;
@@ -331,6 +375,9 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
        instead of widening the whole page. */
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-8);
+  }
+  .admin-links {
+    margin-top: calc(-1 * var(--space-6));
   }
   .block {
     display: grid;

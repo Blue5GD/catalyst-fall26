@@ -31,7 +31,7 @@ Points live in the `point_entries` table. Each row is one award, and the leaderb
 ### Award points
 
 1. Go to `/admin` on the site. Only accounts with `role` set to `admin` can open it.
-2. Pick one or more people, the points (1 to 100), and a short, specific reason like "Won the Project 1 design challenge".
+2. Pick one or more people, the points (1 to 100), and a short, specific reason like "Won the Project 1 design challenge". To award a whole group, type its number ("4" or "Group 4") and pick it: everyone in that group this sprint is added at once (only after groups are published; between sprints it uses the sprint that just ended), and you can still remove anyone who shouldn't get the points.
 3. Choose **Award** for challenge or project prizes, or **Correction** when you're fixing a mistake.
 
 The reason shows in each person's points history. The site records your NetID as the person who awarded the points.
@@ -60,6 +60,25 @@ If the site is down, add a row in **Table Editor → point_entries → Insert �
 | `created_by` | Your NetID |
 
 Leave `id` and `created_at` empty. They fill themselves in.
+
+## Groups
+
+Groups are made per sprint at `/admin/groups` (linked from `/admin`). Nobody else sees them until you publish.
+
+### Make groups
+
+1. Open `/admin/groups`. It opens on the current sprint; use **Sprint** to pick another.
+2. Set the group size (usually 4). The line below shows what you'll get, like "27 participants → 7 groups: six of 4, one of 3."
+3. Click **Generate groups**. Everyone with an account and role `participant` is shuffled in. Leads aren't; add yourselves by hand if you want to be in a group.
+4. Move people with the **Move to** menu next to each name. **New group** starts another group; **No group** takes someone out.
+5. Not happy? **Reshuffle** starts over and throws away your moves.
+6. Click **Publish groups**. If any participant isn't in a group, it asks first. Everyone signed in can now see the groups on `/group`, with each group's points this sprint.
+
+### After publishing
+
+- You can still move people, but you can't reshuffle. Group numbers never change, so if Group 2 empties, the others keep their numbers.
+- **Late sign-ups** show under **Unassigned**, and the count turns peach while any participant is left out, before or after publishing. Leads listed there don't turn it peach. Move them into a group.
+- To unpublish in an emergency: **Table Editor → sprints**, find the sprint and clear `groups_published_at`.
 
 ## Accounts
 

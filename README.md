@@ -31,6 +31,8 @@ Open [localhost:4321](http://localhost:4321).
 | `/` home | Ahead of time | `src/pages/index.astro` |
 | `/members` | Ahead of time | The files in `members/` |
 | `/leaderboard` | Per request | Supabase `leaderboard` view |
+| `/group` | Per request | Supabase `sprints`, `groups`, `group_members` |
+| `/admin/groups` | Per request | Same, plus the admin group functions |
 | `/signin`, `/signup` | Per request | Supabase Auth |
 
 The **Sign in / Sign out** link in the header is a [server island](https://docs.astro.build/en/guides/server-islands/). It loads separately on each visit, so the rest of the page can stay static.
@@ -48,6 +50,8 @@ src/content.config.ts    The fields allowed in members/*.json
 src/styles/global.css    Colors, type and shared styles, from DESIGN.md
 src/lib/guards.ts        Sign-in and admin checks for pages
 src/lib/points-form.ts   The admin points form and points formatting
+src/lib/groups.ts        Current sprint, group sizes and the groups admin form
+src/lib/groups-data.ts   Loads sprints and groups from Supabase
 src/pages/me.astro       Your points and history
 src/pages/admin/         Admin pages (leads only)
 scripts/check-members.mjs  Checks every profile in members/
