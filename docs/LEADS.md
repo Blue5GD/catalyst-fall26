@@ -61,6 +61,25 @@ If the site is down, add a row in **Table Editor → point_entries → Insert �
 
 Leave `id` and `created_at` empty. They fill themselves in.
 
+## Groups
+
+Groups are made per sprint at `/admin/groups` (linked from `/admin`). Nobody else sees them until you publish.
+
+### Make groups
+
+1. Open `/admin/groups`. It opens on the current sprint; use **Sprint** to pick another.
+2. Set the group size (usually 4). The line below shows what you'll get, like "27 participants → 7 groups: six of 4, one of 3."
+3. Click **Generate groups**. Everyone with an account and role `participant` is shuffled in. Leads aren't; add yourselves by hand if you want to be in a group.
+4. Move people with the **Move to** menu next to each name. **New group** starts another group; **No group** takes someone out.
+5. Not happy? **Reshuffle** starts over and throws away your moves.
+6. Click **Publish groups**. Everyone signed in can now see the groups on `/group`.
+
+### After publishing
+
+- You can still move people, but you can't reshuffle. Group numbers never change, so if Group 2 empties, the others keep their numbers.
+- **Late sign-ups** show under **Unassigned** (the count turns peach). Move them into a group.
+- To unpublish in an emergency: **Table Editor → sprints**, find the sprint and clear `groups_published_at`.
+
 ## Accounts
 
 Participants create their own accounts at `/signup` with their name, NetID, Yale email and a password. The NetID isn't verified.
