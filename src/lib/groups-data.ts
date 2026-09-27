@@ -12,14 +12,18 @@ export async function loadSprints(supabase: SupabaseClient): Promise<{ sprints: 
   return { sprints: (data ?? []) as Sprint[], error: Boolean(error) };
 }
 
+/** Pass `people` (active participants) when the page already loaded them. */
 export async function loadGroups(
   supabase: SupabaseClient,
   sprintId: number,
+  loadedPeople?: Person[],
 ): Promise<{ groups: Group[]; unassigned: Person[]; people: Person[]; error: boolean }> {
   const [groups, members, people] = await Promise.all([
     supabase.from('groups').select('id, number').eq('sprint_id', sprintId),
     supabase.from('group_members').select('group_id, participant_id').eq('sprint_id', sprintId),
-    supabase.from('participants').select('id, netid, name, role').eq('active', true).order('name'),
+    loadedPeople
+      ? { data: loadedPeople, error: null }
+      : supabase.from('participants').select('id, netid, name, role').eq('active', true).order('name'),
   ]);
   for (const result of [groups, members, people]) {
     if (result.error) console.error('Failed to load groups:', result.error);
@@ -30,4 +34,34 @@ export async function loadGroups(
     people: everyone,
     error: Boolean(groups.error || members.error || people.error),
   };
+}
+
+/** The number of the caller's group in a sprint, or null. Two small reads instead of every group. */
+export async function loadMyGroupNumber(supabase: SupabaseClient, sprintId: number, participantId: string): Promise<number | null> {
+  const { data: membership, error } = await supabase
+    .from('group_members')
+    .select('group_id')
+    .eq('sprint_id', sprintId)
+    .eq('participant_id', participantId)
+    .maybeSingle();
+  if (error) console.error('Failed to load your group:', error);
+  if (!membership) return null;
+  const { data: group, error: groupError } = await supabase
+    .from('groups')
+    .select('number')
+    .eq('id', membership.group_id)
+    .maybeSingle();
+  if (groupError) console.error('Failed to load your group:', groupError);
+  return group?.number ?? null;
+}
+
+/** Each grouped member's points during the sprint's dates. */
+export async function loadSprintPoints(
+  supabase: SupabaseClient,
+  sprintId: number,
+): Promise<{ points: Map<string, number>; error: boolean }> {
+  const { data, error } = await supabase.rpc('sprint_points', { p_sprint: sprintId });
+  if (error) console.error('Failed to load sprint points:', error);
+  const rows = (data ?? []) as { participant_id: string; points: number }[];
+  return { points: new Map(rows.map((r) => [r.participant_id, Number(r.points)])), error: Boolean(error) };
 }

@@ -50,15 +50,13 @@ export function todayInNewHaven(now = new Date()): string {
   return newHavenDate.format(now);
 }
 
-/** The sprint running on `today`, else the next one to start, else the last one. */
-export function currentSprint<T extends Pick<Sprint, 'starts_on' | 'ends_on'>>(sprints: T[], today: string): T | null {
+/**
+ * The latest sprint that has started by `today`, so a sprint's groups stay up
+ * in the break after it. Before the first sprint, the first one.
+ */
+export function currentSprint<T extends Pick<Sprint, 'starts_on'>>(sprints: T[], today: string): T | null {
   const sorted = [...sprints].sort((a, b) => a.starts_on.localeCompare(b.starts_on));
-  return (
-    sorted.find((s) => s.starts_on <= today && today <= s.ends_on) ??
-    sorted.find((s) => s.starts_on > today) ??
-    sorted.at(-1) ??
-    null
-  );
+  return sorted.findLast((s) => s.starts_on <= today) ?? sorted[0] ?? null;
 }
 
 /** The sizes generate_groups() makes: ceil(n / size) groups, within one of each other. */

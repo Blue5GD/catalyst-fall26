@@ -3,7 +3,7 @@ import { Image } from 'astro:assets';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { requireUser } from '../lib/guards';
 import { getMembers } from '../lib/members';
-import { loadGroups, loadSprints } from '../lib/groups-data';
+import { loadGroups, loadSprintPoints, loadSprints } from '../lib/groups-data';
 import { currentSprint, dateRange, groupOf, sprintNumber, todayInNewHaven, type Group } from '../lib/groups';
 
 export const prerender = false;
@@ -18,9 +18,18 @@ const published = Boolean(sprint?.groups_published_at);
 
 let groups: Group[] = [];
 let groupsError = false;
-if (sprint && published) ({ groups, error: groupsError } = await loadGroups(supabase, sprint.id));
+let points = new Map<string, number>();
+let pointsError = false;
+if (sprint && published) {
+  const [loaded, sprintPoints] = await Promise.all([loadGroups(supabase, sprint.id), loadSprintPoints(supabase, sprint.id)]);
+  // A group whose members all went inactive has no one left to show.
+  groups = loaded.groups.filter((g) => g.members.length > 0);
+  groupsError = loaded.error;
+  ({ points, error: pointsError } = sprintPoints);
+}
 
 const mine = groupOf(groups, user.id);
+const pointsOf = (g: Group) => g.members.reduce((sum, m) => sum + (points.get(m.id) ?? 0), 0);
 const photos = new Map((await getMembers()).map((m) => [m.netid, m.photo]));
 ---
 
@@ -38,10 +47,11 @@ const photos = new Map((await getMembers()).map((m) => [m.netid, m.photo]));
           {user.role === 'admin' ? (
             <Fragment>Groups aren't published yet. <a href="/admin/groups">Manage them in Admin.</a></Fragment>
           ) : (
-            'Groups are announced at kickoff.'
+            "Groups for this sprint aren't out yet."
           )}
         </p>
       ) : mine ? (
+        <Fragment>
         <ul class="grid">
           {mine.members.map((m) => {
             const photo = photos.get(m.netid);
@@ -52,12 +62,27 @@ const photos = new Map((await getMembers()).map((m) => [m.netid, m.photo]));
                 ) : (
                   <div class="photo photo--missing" aria-hidden="true" />
                 )}
-                <h4>{m.name}</h4>
-                {m.id === user.id && <p class="label you">You</p>}
+                <h3 class="name">{m.name}</h3>
+                <p class="label meta num">
+                  {[m.id === user.id && 'You', !pointsError && `${points.get(m.id) ?? 0} this sprint`].filter(Boolean).join(' · ')}
+                </p>
               </li>
             );
           })}
         </ul>
+        {!pointsError && (
+          <dl class="stats">
+            <div>
+              <dt class="label">Group points this sprint</dt>
+              <dd class="stat num">{pointsOf(mine)}</dd>
+            </div>
+            <div>
+              <dt class="label">Members</dt>
+              <dd class="stat num">{mine.members.length}</dd>
+            </div>
+          </dl>
+        )}
+        </Fragment>
       ) : (
         <p class="page-intro">You're not in a group yet. Ask a lead to add you.</p>
       )
@@ -73,6 +98,7 @@ const photos = new Map((await getMembers()).map((m) => [m.netid, m.photo]));
             <li class:list={['row', { mine: g.number === mine?.number }]}>
               <span class="row-name">Group {g.number}</span>
               <span class="row-members">{g.members.map((m) => m.name).join(', ')}</span>
+              {!pointsError && <span class="row-points num">{pointsOf(g)} {pointsOf(g) === 1 ? 'point' : 'points'}</span>}
             </li>
           ))}
         </ul>
@@ -106,12 +132,37 @@ const photos = new Map((await getMembers()).map((m) => [m.netid, m.photo]));
   .photo--missing {
     background: var(--color-line);
   }
-  h4 {
+  .name {
     margin-top: var(--space-3);
+    font-size: var(--text-subheading);
+    font-weight: 500;
+    line-height: 1.3;
   }
-  .you {
+  .meta {
     margin-top: var(--space-1);
     color: var(--color-text-muted);
+  }
+  /* Group stats in a row below the members (DESIGN.md §6). */
+  .stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-7);
+    margin: var(--space-7) 0 0;
+    padding-top: var(--space-5);
+    border-top: var(--line);
+  }
+  .stats div {
+    display: grid;
+    gap: var(--space-1);
+  }
+  .stats dd {
+    margin: 0;
+  }
+  .stat {
+    font-size: var(--text-section);
+    font-weight: 500;
+    line-height: 1;
+    color: var(--color-text);
   }
   .all {
     display: grid;
@@ -125,7 +176,7 @@ const photos = new Map((await getMembers()).map((m) => [m.netid, m.photo]));
   }
   .row {
     display: grid;
-    grid-template-columns: 120px minmax(0, 1fr);
+    grid-template-columns: 120px minmax(0, 1fr) auto;
     gap: var(--space-4);
     padding: var(--space-3) var(--space-3);
     border-bottom: var(--line);
@@ -133,6 +184,10 @@ const photos = new Map((await getMembers()).map((m) => [m.netid, m.photo]));
   }
   .row.mine {
     box-shadow: inset 2px 0 0 var(--color-accent);
+  }
+  .row-points {
+    color: var(--color-text);
+    text-align: right;
   }
   .row-name {
     color: var(--color-text);
@@ -147,8 +202,15 @@ const photos = new Map((await getMembers()).map((m) => [m.netid, m.photo]));
       margin-top: var(--space-7);
     }
     .row {
-      grid-template-columns: minmax(0, 1fr);
-      gap: var(--space-1);
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--space-1) var(--space-4);
+    }
+    .row-members {
+      grid-column: 1;
+    }
+    .row-points {
+      grid-row: 1;
+      grid-column: 2;
     }
   }
 </style>

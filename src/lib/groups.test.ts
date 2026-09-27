@@ -37,9 +37,11 @@ test('currentSprint picks the sprint running today, including its first and last
   assert.equal(currentSprint(sprints, '2026-10-12')?.slug, 'project-2');
 });
 
-test('currentSprint picks the next sprint before the first and in a gap', () => {
+test('currentSprint picks the first sprint before any start, and keeps the last one through a gap', () => {
   assert.equal(currentSprint(sprints, '2026-09-27')?.slug, 'project-1');
-  assert.equal(currentSprint(sprints, '2026-10-28')?.slug, 'project-3');
+  assert.equal(currentSprint(sprints, '2026-10-26')?.slug, 'project-2');
+  assert.equal(currentSprint(sprints, '2026-11-01')?.slug, 'project-2');
+  assert.equal(currentSprint(sprints, '2026-11-02')?.slug, 'project-3');
 });
 
 test('currentSprint picks the last sprint after the program ends, and null with none', () => {

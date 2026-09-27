@@ -32,6 +32,7 @@ interface Person {
   id: string;
   netid: string;
   name: string;
+  role: 'participant' | 'admin';
 }
 
 const gate = requireAdmin(Astro);
@@ -102,7 +103,7 @@ if (!forbidden) {
   }
 
   const [peopleResult, recentResult] = await Promise.all([
-    supabase.from('participants').select('id, netid, name').eq('active', true).order('name'),
+    supabase.from('participants').select('id, netid, name, role').eq('active', true).order('name'),
     supabase.rpc('recent_point_entries', { p_limit: 50 }),
   ]);
   if (peopleResult.error) console.error('Failed to load participants:', peopleResult.error);
@@ -111,11 +112,12 @@ if (!forbidden) {
   recent = (recentResult.data ?? []) as RecentRow[];
   recentError = Boolean(recentResult.error);
 
-  // The current sprint's groups, so a whole group can be picked at once.
+  // The current sprint's published groups, so a whole group can be picked at
+  // once. Draft numbers can change on a reshuffle, so they aren't offered.
   const { sprints } = await loadSprints(supabase);
   const sprint = currentSprint(sprints, todayInNewHaven());
-  if (sprint) {
-    groupChoices = (await loadGroups(supabase, sprint.id)).groups
+  if (sprint?.groups_published_at) {
+    groupChoices = (await loadGroups(supabase, sprint.id, people)).groups
       .filter((g) => g.members.length > 0)
       .map((g) => ({ number: g.number, memberIds: g.members.map((m) => m.id), names: g.members.map((m) => m.name) }));
   }

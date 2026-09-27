@@ -5,8 +5,8 @@ import PointsTable from '../components/PointsTable.astro';
 import { requireUser } from '../lib/guards';
 import { getMembers } from '../lib/members';
 import { shownRank, type PointRow } from '../lib/points-form';
-import { loadGroups, loadSprints } from '../lib/groups-data';
-import { currentSprint, groupOf, todayInNewHaven } from '../lib/groups';
+import { loadMyGroupNumber, loadSprints } from '../lib/groups-data';
+import { currentSprint, todayInNewHaven } from '../lib/groups';
 
 export const prerender = false;
 
@@ -35,7 +35,7 @@ const member = (await getMembers()).find((m) => m.netid === user.netid);
 // Your group this sprint, once it's published.
 const { sprints } = await loadSprints(supabase);
 const sprint = currentSprint(sprints, todayInNewHaven());
-const myGroup = sprint?.groups_published_at ? groupOf((await loadGroups(supabase, sprint.id)).groups, user.id) : null;
+const myGroup = sprint?.groups_published_at ? await loadMyGroupNumber(supabase, sprint.id, user.id) : null;
 ---
 
 <BaseLayout title="You">
@@ -56,7 +56,7 @@ const myGroup = sprint?.groups_published_at ? groupOf((await loadGroups(supabase
         </div>
       </dl>
       {myGroup && sprint && (
-        <p class="group-line"><a href="/group">Group {myGroup.number} · {sprint.title}</a></p>
+        <p class="group-line"><a href="/group">Group {myGroup} · {sprint.title}</a></p>
       )}
     </div>
     <div class:list={['profile-photo', { 'has-photo': member?.photo }]}>

@@ -92,6 +92,8 @@ const published = Boolean(sprint?.groups_published_at);
 const formAction = sprint ? `/admin/groups?sprint=${sprint.slug}` : '/admin/groups';
 const numbers = groups.map((g) => g.number);
 const eligible = people.filter((p) => p.role === 'participant').length;
+// Participants in no group: late sign-ups, or people a lead took out.
+const late = lateSignUps(unassigned);
 // Reshuffle defaults to the size of the biggest group now.
 const reshuffleSize = Math.min(
   MAX_GROUP_SIZE,
@@ -195,7 +197,7 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
               <section class="unassigned" aria-labelledby="unassigned">
                 <h3 id="unassigned">
                   Unassigned{' '}
-                  <span class:list={['count', 'num', { attention: published && lateSignUps(unassigned) > 0 }]}>
+                  <span class:list={['count', 'num', { attention: late > 0 }]}>
                     {unassigned.length}
                   </span>
                 </h3>
@@ -239,7 +241,12 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
                     </label>
                     <button type="submit" class="btn btn--secondary">Reshuffle</button>
                   </form>
-                  <form method="post" action={formAction} data-busy-form>
+                  <form
+                    method="post"
+                    action={formAction}
+                    data-busy-form
+                    data-confirm={late > 0 ? `${late} ${late === 1 ? "participant isn't" : "participants aren't"} in a group yet. Publish anyway?` : undefined}
+                  >
                     <input type="hidden" name="action" value="publish" />
                     <button type="submit" class="btn btn--primary">Publish groups</button>
                   </form>
