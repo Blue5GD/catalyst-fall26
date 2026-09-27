@@ -1,0 +1,42 @@
+---
+// "Move to" for one person on /admin/groups. Posts to the page it's on.
+import type { Person } from '../lib/groups';
+
+interface Props {
+  person: Person;
+  /** Their group number now, or null if they're in no group. */
+  current: number | null;
+  /** Every group number in the sprint. */
+  numbers: number[];
+  /** The number "New group" creates. */
+  next: number;
+  action: string;
+}
+
+const { person, current, numbers, next, action } = Astro.props;
+const id = `to-${person.id}`;
+---
+
+<form method="post" action={action} class="move" data-busy-form>
+  <input type="hidden" name="action" value="move" />
+  <input type="hidden" name="participant" value={person.id} />
+  <label class="visually-hidden" for={id}>Move {person.name} to</label>
+  <select class="input" id={id} name="to">
+    {numbers.map((n) => <option value={n} selected={n === current}>Group {n}</option>)}
+    <option value={next}>New group</option>
+    <option value="none" selected={current === null}>No group</option>
+  </select>
+  <button type="submit" class="btn btn--secondary">Move</button>
+</form>
+
+<style>
+  .move {
+    display: flex;
+    gap: var(--space-2);
+  }
+  .move .input {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+  }
+</style>

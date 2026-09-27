@@ -124,6 +124,7 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
 <BaseLayout title="Admin">
   <section class="page admin">
     <h2>Admin</h2>
+    {!forbidden && <p class="admin-links"><a href="/admin/groups">Groups</a>: generate, adjust and publish.</p>}
     {
       forbidden ? (
         <p class="page-intro">This page is for Catalyst leads.</p>
@@ -331,6 +332,9 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
        instead of widening the whole page. */
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-8);
+  }
+  .admin-links {
+    margin-top: calc(-1 * var(--space-6));
   }
   .block {
     display: grid;
