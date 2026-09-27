@@ -28,7 +28,7 @@ Open [localhost:4321](http://localhost:4321).
 
 | Page | Built | Data comes from |
 |---|---|---|
-| `/` home | Ahead of time | `src/pages/index.astro` |
+| `/` home | Ahead of time | `src/pages/index.astro`, plus the updates in `happening-now/` |
 | `/members` | Ahead of time | The files in `members/` |
 | `/leaderboard` | Per request | Supabase `leaderboard` view |
 | `/group` | Per request | Supabase `sprints`, `groups`, `group_members` |
@@ -41,12 +41,13 @@ The **Sign in / Sign out** link in the header is a [server island](https://docs.
 
 ```
 members/                 One JSON file + one photo per person (see CONTRIBUTING.md)
+happening-now/           Markdown updates shown on the home page (see docs/LEADS.md)
 src/pages/               One file per page. The file path is the URL.
 src/layouts/             The shared page frame: header, footer, fonts
 src/components/          Pieces used across pages
 src/lib/                 Helpers: loading members, Supabase client, sign-in rules
 src/middleware.ts        Runs before every on-demand page; works out who's signed in
-src/content.config.ts    The fields allowed in members/*.json
+src/content.config.ts    The fields allowed in members/*.json and happening-now/*.md
 src/styles/global.css    Colors, type and shared styles, from DESIGN.md
 src/lib/guards.ts        Sign-in and admin checks for pages
 src/lib/points-form.ts   The admin points form and points formatting

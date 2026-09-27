@@ -24,6 +24,12 @@ npm run check:matches
 
 It lists likely NetID typos, sign-ups with no profile yet, profiles with no sign-up yet, and people whose sign-up name differs from their profile. Fix a typo in whichever place is wrong: rename the files in a PR, or edit `netid` in the `participants` table. Accounts marked inactive don't show up in the report.
 
+## Happening now
+
+The **Happening now** section on the home page, under the sprints, shows one update per Markdown file in `happening-now/`, newest first. Use it for this week's todos, upcoming workshops and announcements.
+
+To post an update, copy `happening-now/_template.md` to a new file (for example `happening-now/workshop-2.md`), set `title` and `date`, write the update, and merge it to `main`. Delete the file when it's no longer happening. With no files, the section is hidden.
+
 ## Points
 
 Points live in the `point_entries` table. Each row is one award, and the leaderboard adds them up.

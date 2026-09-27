@@ -1,4 +1,5 @@
 ---
+import { getCollection, render } from 'astro:content';
 import BaseLayout from '../layouts/BaseLayout.astro';
 
 const sprints = [
@@ -8,6 +9,15 @@ const sprints = [
   { title: 'Final project: free build', dates: 'Nov 16 – Dec 6' },
   { title: 'Demo Day', dates: 'Dec 7 – 13' },
 ];
+
+// Updates from happening-now/*.md, newest first.
+const updates = await Promise.all(
+  (await getCollection('now'))
+    .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
+    .map(async (entry) => ({ ...entry, Content: (await render(entry)).Content })),
+);
+const formatDate = (date: Date) =>
+  date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 ---
 
 <BaseLayout title="Catalyst">
@@ -38,6 +48,27 @@ const sprints = [
       }
     </ol>
   </section>
+
+  {
+    updates.length > 0 && (
+      <section class="now" aria-labelledby="now-title">
+        <h3 id="now-title">Happening now</h3>
+        {updates.map(({ data, Content }) => (
+          <article class="now-item">
+            <div class="now-head">
+              <h4>{data.title}</h4>
+              <time class="now-date num" datetime={data.date.toISOString().slice(0, 10)}>
+                {formatDate(data.date)}
+              </time>
+            </div>
+            <div class="prose">
+              <Content />
+            </div>
+          </article>
+        ))}
+      </section>
+    )
+  }
 </BaseLayout>
 
 <style>
@@ -93,7 +124,58 @@ const sprints = [
     font-size: var(--text-small);
   }
 
+  .now {
+    margin-top: var(--space-8);
+  }
+  .now-item {
+    padding-block: var(--space-5);
+    border-bottom: var(--line);
+  }
+  .now-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-2) var(--space-4);
+  }
+  .now-date {
+    color: var(--color-text-muted);
+    font-size: var(--text-caption);
+  }
+
+  /* Markdown from happening-now/. */
+  .prose {
+    margin-top: var(--space-3);
+    max-width: 65ch;
+  }
+  .prose :global(> * + *) {
+    margin-top: var(--space-3);
+  }
+  .prose :global(ul),
+  .prose :global(ol) {
+    margin-bottom: 0;
+    padding-left: var(--space-5);
+  }
+  .prose :global(li + li) {
+    margin-top: var(--space-1);
+  }
+  .prose :global(li:has(> input[type='checkbox'])) {
+    list-style: none;
+    margin-left: calc(-1 * var(--space-5));
+  }
+  .prose :global(input[type='checkbox']) {
+    accent-color: var(--color-accent);
+    margin: 0 var(--space-2) 0 0;
+    vertical-align: -2px;
+  }
+  .prose :global(strong) {
+    color: var(--color-text);
+  }
+
   @media (max-width: 720px) {
+    .now {
+      margin-top: var(--space-7);
+    }
     .hero {
       flex-direction: column;
       align-items: flex-start;

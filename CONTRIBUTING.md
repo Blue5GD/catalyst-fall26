@@ -2,7 +2,7 @@
 
 Your first Catalyst task is to put your name and photo on the members page by opening a **pull request** (PR). It takes about 20 minutes, and you'll use the same Git and GitHub steps on every project this fall.
 
-**Do it before the second workshop.**
+**Do it before the first workshop on Tuesday, Sep 29.**
 
 **The members page is public.** Anyone with the link can see your name, photo and bio. Only add what you're happy to share.
 
@@ -31,7 +31,7 @@ That's the whole change. Don't edit any other files. For a finished example, loo
 
 ## Before you start
 
-You need three things. If you set these up in the first workshop, skip ahead.
+You need three things. If you already have them, skip ahead.
 
 1. **A GitHub account.** Sign up at [github.com](https://github.com).
 2. **Git.** Open a terminal (Terminal on Mac, PowerShell on Windows) and run:
