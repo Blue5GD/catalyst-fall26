@@ -1,6 +1,6 @@
 ---
 title: Open your first PR before Tuesday
-date: 2026-09-29
+date: 2026-09-28
 ---
 
 Before session one on **Tuesday, Sep 29**, add yourself to the [members page](/members) by opening a pull request. It takes about 20 minutes. [The contributing guide](https://github.com/eliboug/catalyst-fall26/blob/main/CONTRIBUTING.md) walks you through each step.
