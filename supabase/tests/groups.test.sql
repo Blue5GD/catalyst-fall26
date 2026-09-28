@@ -2,7 +2,7 @@
 -- Run with: npx supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(39);
+select plan(35);
 
 -- Only the accounts made here take part in the shuffle. Everything is rolled
 -- back at the end.
@@ -194,13 +194,6 @@ select results_eq(
   '"New group" for someone already alone keeps their group number'
 );
 
--- Points this sprint --------------------------------------------------------------
-reset role;
-insert into public.point_entries (participant_id, amount, reason, created_at) values
-  ('00000000-0000-0000-0000-000000000101', 3, 'pgtap in sprint', '2026-09-30 12:00-04'),
-  ('00000000-0000-0000-0000-000000000101', 5, 'pgtap before sprint', '2026-09-27 23:30-04'),
-  ('00000000-0000-0000-0000-000000000101', 7, 'pgtap after sprint', '2026-10-12 00:30-04');
-
 -- A participant sees published groups ---------------------------------------------
 reset role;
 select pg_temp.act_as('00000000-0000-0000-0000-000000000102');
@@ -208,26 +201,6 @@ set local role authenticated;
 
 select isnt_empty($$select * from public.groups where sprint_id = pg_temp.sprint('project-1')$$, 'participants see published groups');
 select isnt_empty($$select * from public.group_members where sprint_id = pg_temp.sprint('project-1')$$, 'participants see published members');
-select is(
-  (select points::int from public.sprint_points(pg_temp.sprint('project-1')) where participant_id = '00000000-0000-0000-0000-000000000101'),
-  3,
-  'sprint points count only entries between the sprint''s first and last day, New Haven time'
-);
-select is(
-  (select points::int from public.sprint_points(pg_temp.sprint('project-1')) where participant_id = '00000000-0000-0000-0000-000000000102'),
-  0,
-  'grouped members with no points this sprint show 0'
-);
-
-reset role;
-update public.sprints set groups_published_at = null where id = pg_temp.sprint('project-1');
-select pg_temp.act_as('00000000-0000-0000-0000-000000000102');
-set local role authenticated;
-select is_empty($$select * from public.sprint_points(pg_temp.sprint('project-1'))$$, 'participants get no sprint points for draft groups');
-
-reset role;
-set local role anon;
-select throws_ok($$select * from public.sprint_points(1)$$, '42501', null, 'visitors cannot read sprint points');
 
 select * from finish();
 rollback;

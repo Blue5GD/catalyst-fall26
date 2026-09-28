@@ -172,7 +172,7 @@ Each screen uses a layout from the template.
 | Sign in | **Title slide** | Slash plus "Catalyst," then one button: "Sign in with Yale Google." |
 | Sprint page | **Section title** | Large number (`01`–`05`) on the left, sprint name on the right, one-line description below in `--color-text-secondary`. Then the content in reading width. |
 | Sprint list | **Agenda** | Numbered rows (`01`, `02`, `03`) with sprint names in label style, as on the agenda slide. |
-| Group page | **Three- or four-column layout** | One column per member (photo, name, points). Group stats in a row below. |
+| Group page | **Three- or four-column layout** | One column per member (photo and name). |
 | Profile | **Image with text** | Photo on the right half, name and details on the left. On phones, the photo goes on top. |
 | Leaderboard | **Slide title + body** | Heading, then a table with hairline rows. |
 | Members | **Three-column layout with images** | Grid of photos with names below. Four columns on desktop, two on phones. |

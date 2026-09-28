@@ -78,7 +78,7 @@ Groups are made per sprint at `/admin/groups` (linked from `/admin`). Nobody els
 3. Click **Generate groups**. Everyone with an account and role `participant` is shuffled in. Leads aren't; add yourselves by hand if you want to be in a group.
 4. Move people with the **Move to** menu next to each name. **New group** starts another group; **No group** takes someone out.
 5. Not happy? **Reshuffle** starts over and throws away your moves.
-6. Click **Publish groups**. If any participant isn't in a group, it asks first. Everyone signed in can now see the groups on `/group`, with each group's points this sprint.
+6. Click **Publish groups**. If any participant isn't in a group, it asks first. Everyone signed in can now see the groups on `/group`.
 
 ### After publishing
 

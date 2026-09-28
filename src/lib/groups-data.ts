@@ -54,14 +54,3 @@ export async function loadMyGroupNumber(supabase: SupabaseClient, sprintId: numb
   if (groupError) console.error('Failed to load your group:', groupError);
   return group?.number ?? null;
 }
-
-/** Each grouped member's points during the sprint's dates. */
-export async function loadSprintPoints(
-  supabase: SupabaseClient,
-  sprintId: number,
-): Promise<{ points: Map<string, number>; error: boolean }> {
-  const { data, error } = await supabase.rpc('sprint_points', { p_sprint: sprintId });
-  if (error) console.error('Failed to load sprint points:', error);
-  const rows = (data ?? []) as { participant_id: string; points: number }[];
-  return { points: new Map(rows.map((r) => [r.participant_id, Number(r.points)])), error: Boolean(error) };
-}
