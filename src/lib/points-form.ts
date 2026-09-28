@@ -222,3 +222,18 @@ export function matchingGroup(pickedIds: string[], groups: GroupChoice[]): numbe
   );
   return match?.number ?? null;
 }
+
+/**
+ * Splits a pasted list like "ab123 cd456, ef789" into NetIDs found in
+ * `known` (keyed by lowercase NetID) and the tokens that matched nobody.
+ */
+export function splitNetids<T>(text: string, known: Map<string, T>): { found: T[]; unknown: string[] } {
+  const found: T[] = [];
+  const unknown: string[] = [];
+  for (const token of text.split(/[\s,;]+/).filter(Boolean)) {
+    const match = known.get(token.toLowerCase());
+    if (match === undefined) unknown.push(token);
+    else if (!found.includes(match)) found.push(match);
+  }
+  return { found, unknown };
+}

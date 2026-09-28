@@ -14,6 +14,7 @@ import {
   parseCorrectId,
   peopleSummary,
   shownRank,
+  splitNetids,
 } from './points-form.ts';
 
 const A = '00000000-0000-0000-0000-00000000000a';
@@ -199,4 +200,10 @@ test('shownRank hides the rank until someone has points', () => {
   assert.equal(shownRank(0, 1), null);
   assert.equal(shownRank(5, 3), 3);
   assert.equal(shownRank(5, null), null);
+});
+
+test('splitNetids picks known NetIDs and returns the rest', () => {
+  const known = new Map([['ab123', 'A'], ['cd456', 'B']]);
+  assert.deepEqual(splitNetids(' AB123  cd456,zz999\nab123 ', known), { found: ['A', 'B'], unknown: ['zz999'] });
+  assert.deepEqual(splitNetids('', known), { found: [], unknown: [] });
 });

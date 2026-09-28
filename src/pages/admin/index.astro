@@ -164,9 +164,13 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
                   list="people-list"
                   placeholder="Name, NetID or group number"
                   autocomplete="off"
+                  aria-describedby="people-hint"
                   hidden
                   data-people-search
                 />
+                <span class="field-hint" id="people-hint" role="status" hidden data-people-hint>
+                  To add many people, paste their NetIDs separated by spaces.
+                </span>
                 <datalist id="people-list">
                   {people.map((p) => <option value={`${p.name} (${p.netid})`} />)}
                   {groupChoices.map((g) => (
@@ -269,7 +273,7 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
 </BaseLayout>
 
 <script>
-  import { buttonLabel, matchingGroup, peopleSummary } from '../../lib/points-form';
+  import { buttonLabel, matchingGroup, peopleSummary, splitNetids } from '../../lib/points-form';
 
   // Turns the plain multi-select into a search box plus removable chips.
   // Without JavaScript the multi-select still works on its own.
@@ -283,10 +287,13 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
     const pointsInput = form.querySelector<HTMLInputElement>('[data-points]')!;
     const summary = form.querySelector<HTMLElement>('[data-summary]')!;
     const submit = form.querySelector<HTMLButtonElement>('[data-submit]')!;
+    const hint = form.querySelector<HTMLElement>('[data-people-hint]')!;
+    const defaultHint = hint.textContent!.trim();
 
     select.hidden = true;
     search.hidden = false;
     chips.hidden = false;
+    hint.hidden = false;
     label.htmlFor = 'people-search';
     if (select.getAttribute('aria-invalid')) search.setAttribute('aria-invalid', 'true');
 
@@ -301,6 +308,9 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
     }));
     const groupByLabel = new Map(groupOptions.map((o, i) => [o.value, groups[i]]));
     const nameOf = (o: HTMLOptionElement) => o.text.replace(/ \([^)]*\)$/, '');
+    const byNetid = new Map(
+      [...select.options].map((o) => [(o.text.match(/\(([^)]*)\)$/)?.[1] ?? '').toLowerCase(), o]),
+    );
 
     const render = () => {
       const picked = [...select.selectedOptions];
@@ -349,12 +359,33 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
       return true;
     };
 
-    search.addEventListener('input', pick);
+    // "ab123 cd456 ef789" picks everyone listed. NetIDs that match nobody
+    // stay in the box so they can be fixed.
+    const pickNetids = (text: string) => {
+      const { found, unknown } = splitNetids(text, byNetid);
+      for (const option of found) option.selected = true;
+      search.value = unknown.join(' ');
+      hint.textContent = unknown.length
+        ? `No active participant with NetID ${unknown.join(', ')}. Check the spelling.`
+        : defaultHint;
+      render();
+    };
+    const isList = (text: string) => text.trim().split(/[\s,;]+/).length > 1;
+
+    search.addEventListener('input', () => {
+      if (pick()) hint.textContent = defaultHint;
+    });
+    search.addEventListener('paste', (event) => {
+      const text = event.clipboardData?.getData('text') ?? '';
+      if (!isList(text)) return;
+      event.preventDefault();
+      pickNetids(`${search.value} ${text}`);
+    });
     search.addEventListener('keydown', (event) => {
       // Enter picks a match instead of submitting half-filled.
       if (event.key === 'Enter') {
         event.preventDefault();
-        pick();
+        if (!pick() && isList(search.value)) pickNetids(search.value);
       }
     });
     direction.addEventListener('change', render);
