@@ -26,7 +26,7 @@ It lists likely NetID typos, sign-ups with no profile yet, profiles with no sign
 
 ## Happening now
 
-The **Happening now** section on the home page, under the sprints, shows one update per Markdown file in `happening-now/`, newest first. Use it for this week's todos, upcoming workshops and announcements.
+The **Happening now** section at the top of the home page shows one update per Markdown file in `happening-now/`, newest first. Set `pin: true` to keep one update above the rest. Use it for this week's todos, upcoming workshops and announcements.
 
 To post an update, copy `happening-now/_template.md` to a new file (for example `happening-now/workshop-2.md`), set `title` and `date`, write the update, and merge it to `main`. Delete the file when it's no longer happening. With no files, the section is hidden.
 
