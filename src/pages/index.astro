@@ -10,10 +10,13 @@ const sprints = [
   { title: 'Demo Day', dates: 'Dec 7 – 13' },
 ];
 
-// Updates from happening-now/*.md, newest first.
+// Updates from happening-now/*.md. Pinned posts first, then newest first.
 const updates = await Promise.all(
   (await getCollection('now'))
-    .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
+    .sort((a, b) => {
+      const pin = Number(Boolean(b.data.pin)) - Number(Boolean(a.data.pin));
+      return pin || b.data.date.getTime() - a.data.date.getTime();
+    })
     .map(async (entry) => ({ ...entry, Content: (await render(entry)).Content })),
 );
 const formatDate = (date: Date) =>
@@ -32,21 +35,6 @@ const formatDate = (date: Date) =>
         <a href="/leaderboard">Check the leaderboard</a>
       </p>
     </div>
-  </section>
-
-  <section class="agenda" aria-labelledby="agenda-title">
-    <h3 id="agenda-title">Sprints</h3>
-    <ol>
-      {
-        sprints.map((sprint, i) => (
-          <li>
-            <span class="agenda-num num">{String(i + 1).padStart(2, '0')}</span>
-            <span class="agenda-title">{sprint.title}</span>
-            <span class="agenda-dates num">{sprint.dates}</span>
-          </li>
-        ))
-      }
-    </ol>
   </section>
 
   {
@@ -69,6 +57,22 @@ const formatDate = (date: Date) =>
       </section>
     )
   }
+
+  <section class="agenda" aria-labelledby="agenda-title">
+    <h3 id="agenda-title">Sprints</h3>
+    <ol>
+      {
+        sprints.map((sprint, i) => (
+          <li>
+            <span class="agenda-num num">{String(i + 1).padStart(2, '0')}</span>
+            <span class="agenda-title">{sprint.title}</span>
+            <span class="agenda-dates num">{sprint.dates}</span>
+          </li>
+        ))
+      }
+    </ol>
+  </section>
+
 </BaseLayout>
 
 <style>

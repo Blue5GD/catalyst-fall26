@@ -39,13 +39,15 @@ const members = defineCollection({
   }),
 });
 
-// One Markdown file per update in happening-now/, shown on the home page under
-// the sprints, newest first. Leads write these. Files starting with "_" are skipped.
+// One Markdown file per update in happening-now/, shown at the top of the home
+// page, newest first. Set pin: true to keep an update above the rest. Leads
+// write these. Files starting with "_" are skipped.
 const now = defineCollection({
   loader: glob({ pattern: ['*.md', '!_*.md'], base: './happening-now' }),
   schema: z.object({
     title: z.string().refine(...notBlank).refine(...oneLine),
     date: z.coerce.date(),
+    pin: z.boolean().optional(),
   }),
 });
 
