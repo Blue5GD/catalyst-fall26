@@ -54,3 +54,4 @@ export async function loadMyGroupNumber(supabase: SupabaseClient, sprintId: numb
   if (groupError) console.error('Failed to load your group:', groupError);
   return group?.number ?? null;
 }
+

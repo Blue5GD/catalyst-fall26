@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import MoveForm from '../../components/MoveForm.astro';
+import PoolEditor from '../../components/PoolEditor.astro';
 import Toast from '../../components/Toast.astro';
 import { requireAdmin } from '../../lib/guards';
 import { formatDate } from '../../lib/points-form';
@@ -12,8 +13,8 @@ import {
   currentSprint,
   dateRange,
   groupsDoneMessage,
-  lateSignUps,
   parseGroupAction,
+  resolvePool,
   sizePreview,
   sprintNumber,
   todayInNewHaven,
@@ -38,6 +39,10 @@ let loadError = false;
 let actionError = '';
 let size = String(DEFAULT_GROUP_SIZE);
 let toast: string | null = null;
+let pool: string[] = [];
+let pastedNetids = '';
+// What the pool editor showed when the form was sent, to put back after an error.
+let submitted: string[] | null = null;
 
 if (!forbidden) {
   const { supabase } = gate;
@@ -47,15 +52,30 @@ if (!forbidden) {
   const slug = Astro.url.searchParams.get('sprint');
   sprint = sprints.find((s) => s.slug === slug) ?? currentSprint(sprints, todayInNewHaven());
 
+  if (sprint) {
+    const { data, error } = await supabase.from('participants').select('id, netid, name, role').eq('active', true).order('name');
+    if (error) console.error('Failed to load participants:', error);
+    people = (data ?? []) as Person[];
+    loadError ||= Boolean(error);
+  }
+
   if (sprint && Astro.request.method === 'POST') {
-    const parsed = parseGroupAction(await Astro.request.formData());
+    const form = await Astro.request.formData();
+    let parsed = parseGroupAction(form);
+    if (!('error' in parsed) && parsed.action === 'generate') {
+      size = String(parsed.size);
+      pastedNetids = typeof form.get('netids') === 'string' ? String(form.get('netids')) : '';
+      if ('ids' in parsed.pool) submitted = parsed.pool.ids;
+      const resolved = resolvePool(parsed.pool, people);
+      if ('error' in resolved) parsed = resolved;
+      else submitted = resolved.ids;
+    }
     if ('error' in parsed) {
       actionError = parsed.error;
     } else {
-      if (parsed.action === 'generate') size = String(parsed.size);
       const { data, error } =
         parsed.action === 'generate'
-          ? await supabase.rpc('generate_groups', { p_sprint: sprint.id, p_size: parsed.size })
+          ? await supabase.rpc('generate_groups', { p_sprint: sprint.id, p_size: parsed.size, p_pool: submitted })
           : parsed.action === 'move'
             ? await supabase.rpc('move_to_group', {
                 p_sprint: sprint.id,
@@ -81,8 +101,10 @@ if (!forbidden) {
   }
 
   if (sprint) {
-    const result = await loadGroups(supabase, sprint.id);
-    ({ groups, unassigned, people } = result);
+    const result = await loadGroups(supabase, sprint.id, people);
+    ({ groups, unassigned } = result);
+    // The pool isn't saved: it starts as every participant each time.
+    pool = submitted ?? people.filter((p) => p.role === 'participant').map((p) => p.id);
     loadError ||= result.error;
     if (Astro.request.method === 'GET') toast = groupsDoneMessage(Astro.url.searchParams, people);
   }
@@ -91,9 +113,6 @@ if (!forbidden) {
 const published = Boolean(sprint?.groups_published_at);
 const formAction = sprint ? `/admin/groups?sprint=${sprint.slug}` : '/admin/groups';
 const numbers = groups.map((g) => g.number);
-const eligible = people.filter((p) => p.role === 'participant').length;
-// Participants in no group: late sign-ups, or people a lead took out.
-const late = lateSignUps(unassigned);
 // Reshuffle defaults to the size of the biggest group now.
 const reshuffleSize = Math.min(
   MAX_GROUP_SIZE,
@@ -161,8 +180,9 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
                   data-size
                 />
               </label>
-              <p class="preview num" aria-live="polite" data-preview data-eligible={eligible}>
-                {sizePreview(eligible, previewSize)}
+              <PoolEditor people={people} selected={pool} netids={pastedNetids} open />
+              <p class="preview num" aria-live="polite" data-preview>
+                {sizePreview(pool.length, previewSize)}
               </p>
               <div>
                 <button type="submit" class="btn btn--primary">Generate groups</button>
@@ -197,7 +217,7 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
               <section class="unassigned" aria-labelledby="unassigned">
                 <h3 id="unassigned">
                   Unassigned{' '}
-                  <span class:list={['count', 'num', { attention: late > 0 }]}>
+                  <span class="count num">
                     {unassigned.length}
                   </span>
                 </h3>
@@ -237,15 +257,21 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
                         max={MAX_GROUP_SIZE}
                         inputmode="numeric"
                         value={reshuffleSize}
+                        data-size
                       />
                     </label>
                     <button type="submit" class="btn btn--secondary">Reshuffle</button>
+                    <div class="reshuffle-pool">
+                      <PoolEditor people={people} selected={pool} netids={pastedNetids} open={pastedNetids !== '' || submitted !== null} />
+                      <p class="preview num" aria-live="polite" data-preview>
+                        {sizePreview(pool.length, reshuffleSize)}
+                      </p>
+                    </div>
                   </form>
                   <form
                     method="post"
                     action={formAction}
                     data-busy-form
-                    data-confirm={late > 0 ? `${late} ${late === 1 ? "participant isn't" : "participants aren't"} in a group yet. Publish anyway?` : undefined}
                   >
                     <input type="hidden" name="action" value="publish" />
                     <button type="submit" class="btn btn--primary">Publish groups</button>
@@ -276,17 +302,21 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
     });
   }
 
-  const sizeInput = document.querySelector<HTMLInputElement>('[data-size]');
-  const preview = document.querySelector<HTMLElement>('[data-preview]');
-  if (sizeInput && preview) {
-    const eligible = Number(preview.dataset.eligible);
-    sizeInput.addEventListener('input', () => {
+  // Keep the size preview in step with the group size and the pool.
+  for (const form of document.querySelectorAll<HTMLFormElement>('form:has([data-pool])')) {
+    const sizeInput = form.querySelector<HTMLInputElement>('[data-size]');
+    const preview = form.querySelector<HTMLElement>('[data-preview]');
+    if (!sizeInput || !preview) continue;
+    const render = () => {
+      const pooled = form.querySelectorAll('input[name="pool"]:checked').length;
       const n = Number(sizeInput.value);
       preview.textContent =
         Number.isInteger(n) && n >= MIN_GROUP_SIZE && n <= MAX_GROUP_SIZE
-          ? sizePreview(eligible, n)
+          ? sizePreview(pooled, n)
           : `Group size must be from ${MIN_GROUP_SIZE} to ${MAX_GROUP_SIZE}.`;
-    });
+    };
+    sizeInput.addEventListener('input', render);
+    form.addEventListener('poolchange', render);
   }
 </script>
 
@@ -322,6 +352,13 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
   .status {
     color: var(--color-text-muted);
   }
+  /* Room for the pool checklist; the size field stays narrow. */
+  .generate {
+    max-width: none;
+  }
+  .generate .field:has([data-size]) {
+    max-width: 120px;
+  }
   .preview {
     min-height: 1.5em;
     color: var(--color-text);
@@ -348,9 +385,6 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
   .count {
     color: var(--color-text-muted);
     font-weight: 400;
-  }
-  .count.attention {
-    color: var(--color-accent);
   }
   .people {
     list-style: none;
@@ -391,8 +425,15 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
   }
   .reshuffle {
     display: flex;
+    flex-wrap: wrap;
     align-items: end;
     gap: var(--space-2);
+  }
+  .reshuffle-pool {
+    flex: 1 1 100%;
+    display: grid;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
   }
   .reshuffle .input {
     width: 88px;
