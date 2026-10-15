@@ -6,9 +6,11 @@ import {
   dateRange,
   groupOf,
   groupSizes,
+  defaultPool,
   groupsDoneMessage,
-  lateSignUps,
   parseGroupAction,
+  poolLeftOut,
+  resolvePool,
   sizePreview,
   sprintNumber,
   todayInNewHaven,
@@ -65,14 +67,28 @@ test('sizePreview describes the groups the shuffle will make', () => {
   assert.equal(sizePreview(27, 4), '27 participants → 7 groups: six of 4, one of 3.');
   assert.equal(sizePreview(8, 4), '8 participants → 2 groups: two of 4.');
   assert.equal(sizePreview(1, 4), '1 participant → 1 group: one of 1.');
-  assert.equal(sizePreview(0, 4), 'No participants to group yet.');
+  assert.equal(sizePreview(0, 4), 'The pool is empty. Add at least one participant.');
 });
 
 test('parseGroupAction reads generate with a size from 2 to 8', () => {
-  assert.deepEqual(parseGroupAction(form({ action: 'generate', size: ' 3 ' })), { action: 'generate', size: 3 });
+  assert.deepEqual(parseGroupAction(form({ action: 'generate', size: ' 3 ' })), {
+    action: 'generate',
+    size: 3,
+    pool: { ids: [] },
+  });
   assert.deepEqual(parseGroupAction(form({ action: 'generate', size: '1' })), { error: 'Group size must be from 2 to 8.' });
   assert.deepEqual(parseGroupAction(form({ action: 'generate', size: '9' })), { error: 'Group size must be from 2 to 8.' });
   assert.deepEqual(parseGroupAction(form({ action: 'generate', size: 'four' })), { error: 'Group size must be from 2 to 8.' });
+});
+
+test('parseGroupAction reads the pool from checkboxes, or from pasted netids first', () => {
+  const f = form({ action: 'generate', size: '4' });
+  f.append('pool', A.toUpperCase());
+  f.append('pool', B);
+  f.append('pool', 'nope');
+  assert.deepEqual(parseGroupAction(f), { action: 'generate', size: 4, pool: { ids: [A, B] } });
+  f.append('netids', ' AA1, bb2\ncc3 ');
+  assert.deepEqual(parseGroupAction(f), { action: 'generate', size: 4, pool: { netids: 'AA1, bb2\ncc3' } });
 });
 
 test('parseGroupAction reads move to a group or to no group', () => {
@@ -172,8 +188,26 @@ test('groupsDoneMessage confirms each action from the redirect URL', () => {
   assert.equal(msg(''), null);
 });
 
-test('lateSignUps counts unassigned participants, not leads', () => {
-  // Leads aren't shuffled in, so counting them would keep the warning on forever.
-  assert.equal(lateSignUps(people), 2);
-  assert.equal(lateSignUps(people.filter((p) => p.role === 'admin')), 0);
+test('resolvePool skips leads and names netids that are not members', () => {
+  assert.deepEqual(resolvePool({ netids: 'AA1\ncc3' }, people), { ids: [A] });
+  assert.deepEqual(resolvePool({ netids: 'aa1, zz9' }, people), {
+    error: "zz9 isn't an active member. Check the spelling or take it out.",
+  });
+  assert.deepEqual(resolvePool({ netids: 'zz9 yy8' }, people), {
+    error: "These aren't active members: zz9, yy8. Check the spelling or take them out.",
+  });
+  assert.deepEqual(resolvePool({ netids: 'cc3' }, people), { error: 'The pool is empty. Add at least one participant.' });
+  assert.deepEqual(resolvePool({ ids: [B, C] }, people), { ids: [B] });
+  assert.deepEqual(resolvePool({ ids: [] }, people), { error: 'The pool is empty. Add at least one participant.' });
+});
+
+test('defaultPool uses the saved pool, then last sprint, then everyone, and only active participants', () => {
+  assert.deepEqual(defaultPool([B], [A], people), [B]);
+  assert.deepEqual(defaultPool([], [A, C], people), [A]);
+  assert.deepEqual(defaultPool(['gone'], ['gone'], people), [A, B]);
+});
+
+test('poolLeftOut counts pool members in no group, not people left out on purpose or leads', () => {
+  assert.equal(poolLeftOut(people, [A, C]), 1);
+  assert.equal(poolLeftOut(people, []), 0);
 });

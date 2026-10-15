@@ -2,7 +2,7 @@
 // on /admin/groups, and arranging groups for display. Pure functions, so they
 // run under `npm test` without Astro.
 
-import { isUuid } from './points-form.ts';
+import { isUuid, splitNetids } from './points-form.ts';
 
 export const MIN_GROUP_SIZE = 2;
 export const MAX_GROUP_SIZE = 8;
@@ -33,7 +33,8 @@ export interface Group {
 }
 
 export type GroupAction =
-  | { action: 'generate'; size: number }
+  /** Pasted netids win over the checked boxes, so a paste works without JavaScript. */
+  | { action: 'generate'; size: number; pool: { netids: string } | { ids: string[] } }
   /** groupNumber 'new' starts a new group; null takes them out of their group. */
   | { action: 'move'; participantId: string; groupNumber: number | 'new' | null }
   | { action: 'publish' };
@@ -71,7 +72,7 @@ const word = (n: number) => WORDS[n] ?? String(n);
 
 /** "27 participants → 7 groups: six of 4, one of 3." */
 export function sizePreview(n: number, size: number): string {
-  if (n <= 0) return 'No participants to group yet.';
+  if (n <= 0) return 'The pool is empty. Add at least one participant.';
   const sizes = groupSizes(n, size);
   const counts = new Map<number, number>();
   for (const s of sizes) counts.set(s, (counts.get(s) ?? 0) + 1);
@@ -95,7 +96,10 @@ export function parseGroupAction(form: FormData): GroupAction | { error: string 
       if (!(size >= MIN_GROUP_SIZE && size <= MAX_GROUP_SIZE)) {
         return { error: `Group size must be from ${MIN_GROUP_SIZE} to ${MAX_GROUP_SIZE}.` };
       }
-      return { action: 'generate', size };
+      const netids = text(form, 'netids');
+      if (netids) return { action: 'generate', size, pool: { netids } };
+      const ids = form.getAll('pool').filter((v): v is string => typeof v === 'string' && isUuid(v));
+      return { action: 'generate', size, pool: { ids: [...new Set(ids.map((v) => v.toLowerCase()))] } };
     }
     case 'move': {
       const participantId = text(form, 'participant');
@@ -111,6 +115,46 @@ export function parseGroupAction(form: FormData): GroupAction | { error: string 
     default:
       return { error: "That action isn't recognized. Reload the page and try again." };
   }
+}
+
+/**
+ * The participant ids to shuffle. Leads are skipped. A netid that isn't an
+ * active member is an error, so a typo doesn't quietly leave someone out.
+ */
+export function resolvePool(
+  pool: { netids: string } | { ids: string[] },
+  people: Person[],
+): { ids: string[] } | { error: string } {
+  const participants = people.filter((p) => p.role === 'participant');
+  if ('ids' in pool) {
+    const ids = participants.filter((p) => pool.ids.includes(p.id)).map((p) => p.id);
+    return ids.length > 0 ? { ids } : { error: 'The pool is empty. Add at least one participant.' };
+  }
+  const { found, unknown } = splitNetids(pool.netids, new Map(people.map((p) => [p.netid.toLowerCase(), p])));
+  if (unknown.length > 0) {
+    const list = unknown.join(', ');
+    return {
+      error:
+        unknown.length === 1
+          ? `${list} isn't an active member. Check the spelling or take it out.`
+          : `These aren't active members: ${list}. Check the spelling or take them out.`,
+    };
+  }
+  const ids = found.filter((p) => p.role === 'participant').map((p) => p.id);
+  return ids.length > 0 ? { ids } : { error: 'The pool is empty. Add at least one participant.' };
+}
+
+/**
+ * Who starts in the pool: this sprint's saved pool, else whoever was in a
+ * group last sprint, else every participant. Only active participants count.
+ */
+export function defaultPool(saved: string[], lastSprint: string[], people: Person[]): string[] {
+  const participants = people.filter((p) => p.role === 'participant').map((p) => p.id);
+  for (const source of [saved, lastSprint]) {
+    const ids = participants.filter((id) => source.includes(id));
+    if (ids.length > 0) return ids;
+  }
+  return participants;
 }
 
 /**
@@ -138,9 +182,9 @@ export function arrangeGroups(
   return { groups: arranged, unassigned: people.filter((p) => !placed.has(p.id)) };
 }
 
-/** Participants in no group: late sign-ups. Leads are left out; they aren't shuffled in. */
-export function lateSignUps(unassigned: Person[]): number {
-  return unassigned.filter((p) => p.role === 'participant').length;
+/** Participants in the pool but in no group. People left out of the pool on purpose don't count. */
+export function poolLeftOut(unassigned: Person[], pool: string[]): number {
+  return unassigned.filter((p) => p.role === 'participant' && pool.includes(p.id)).length;
 }
 
 export function groupOf(groups: Group[], participantId: string): Group | null {

@@ -54,3 +54,35 @@ export async function loadMyGroupNumber(supabase: SupabaseClient, sprintId: numb
   if (groupError) console.error('Failed to load your group:', groupError);
   return group?.number ?? null;
 }
+
+/**
+ * Admin only. This sprint's saved pool, and who was in a group in the latest
+ * earlier sprint that had groups, for defaultPool().
+ */
+export async function loadPoolSources(
+  supabase: SupabaseClient,
+  sprint: Sprint,
+  sprints: Sprint[],
+): Promise<{ saved: string[]; lastSprint: string[]; error: boolean }> {
+  const earlier = sprints.filter((s) => s.number < sprint.number).map((s) => s.id);
+  const [saved, before] = await Promise.all([
+    supabase.from('group_pool').select('participant_id').eq('sprint_id', sprint.id),
+    earlier.length > 0
+      ? supabase.from('group_members').select('sprint_id, participant_id').in('sprint_id', earlier)
+      : { data: [], error: null },
+  ]);
+  for (const result of [saved, before]) {
+    if (result.error) console.error('Failed to load the group pool:', result.error);
+  }
+  const rows = (before.data ?? []) as { sprint_id: number; participant_id: string }[];
+  const numberOf = new Map(sprints.map((s) => [s.id, s.number]));
+  const latest = rows.reduce<number | null>((best, r) => {
+    const n = numberOf.get(r.sprint_id) ?? 0;
+    return best === null || n > (numberOf.get(best) ?? 0) ? r.sprint_id : best;
+  }, null);
+  return {
+    saved: (saved.data ?? []).map((r) => r.participant_id as string),
+    lastSprint: rows.filter((r) => r.sprint_id === latest).map((r) => r.participant_id),
+    error: Boolean(saved.error || before.error),
+  };
+}
