@@ -6,10 +6,8 @@ import {
   dateRange,
   groupOf,
   groupSizes,
-  defaultPool,
   groupsDoneMessage,
   parseGroupAction,
-  poolLeftOut,
   resolvePool,
   sizePreview,
   sprintNumber,
@@ -199,15 +197,4 @@ test('resolvePool skips leads and names netids that are not members', () => {
   assert.deepEqual(resolvePool({ netids: 'cc3' }, people), { error: 'The pool is empty. Add at least one participant.' });
   assert.deepEqual(resolvePool({ ids: [B, C] }, people), { ids: [B] });
   assert.deepEqual(resolvePool({ ids: [] }, people), { error: 'The pool is empty. Add at least one participant.' });
-});
-
-test('defaultPool uses the saved pool, then last sprint, then everyone, and only active participants', () => {
-  assert.deepEqual(defaultPool([B], [A], people), [B]);
-  assert.deepEqual(defaultPool([], [A, C], people), [A]);
-  assert.deepEqual(defaultPool(['gone'], ['gone'], people), [A, B]);
-});
-
-test('poolLeftOut counts pool members in no group, not people left out on purpose or leads', () => {
-  assert.equal(poolLeftOut(people, [A, C]), 1);
-  assert.equal(poolLeftOut(people, []), 0);
 });

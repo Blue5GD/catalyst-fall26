@@ -145,19 +145,6 @@ export function resolvePool(
 }
 
 /**
- * Who starts in the pool: this sprint's saved pool, else whoever was in a
- * group last sprint, else every participant. Only active participants count.
- */
-export function defaultPool(saved: string[], lastSprint: string[], people: Person[]): string[] {
-  const participants = people.filter((p) => p.role === 'participant').map((p) => p.id);
-  for (const source of [saved, lastSprint]) {
-    const ids = participants.filter((id) => source.includes(id));
-    if (ids.length > 0) return ids;
-  }
-  return participants;
-}
-
-/**
  * Groups in number order with members by name, plus the active people in no
  * group. `people` is active accounts only, so inactive members drop out.
  */
@@ -180,11 +167,6 @@ export function arrangeGroups(
         .sort((a, b) => a.name.localeCompare(b.name)),
     }));
   return { groups: arranged, unassigned: people.filter((p) => !placed.has(p.id)) };
-}
-
-/** Participants in the pool but in no group. People left out of the pool on purpose don't count. */
-export function poolLeftOut(unassigned: Person[], pool: string[]): number {
-  return unassigned.filter((p) => p.role === 'participant' && pool.includes(p.id)).length;
 }
 
 export function groupOf(groups: Group[], participantId: string): Group | null {
