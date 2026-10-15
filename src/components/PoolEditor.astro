@@ -1,190 +1,101 @@
 ---
-// Who gets shuffled into groups on /admin/groups. Goes inside the generate or
-// reshuffle form: checkboxes post as `pool`, pasted netids as `netids`.
+// Who gets shuffled on /admin/groups: everyone, or people picked the same
+// way as for points. Goes inside the generate or reshuffle form. Fires
+// `poolchange` with the pool size whenever it changes.
+import PeoplePicker from './PeoplePicker.astro';
 import type { Person } from '../lib/groups';
 
 interface Props {
-  /** Every active member. Leads are listed only so a pasted lead can be skipped. */
   people: Person[];
-  /** Participant ids checked to start with. */
-  selected: string[];
-  /** Pasted text to put back after an error. */
-  netids?: string;
-  open?: boolean;
+  /** Picked participant ids, or 'all'. */
+  pool: string[] | 'all';
+  /** Prefix for element ids. */
+  id: string;
+  error?: string;
 }
 
-const { people, selected, netids = '', open = false } = Astro.props;
+const { people, pool, id, error } = Astro.props;
 const participants = people.filter((p) => p.role === 'participant');
-const leads = people.filter((p) => p.role === 'admin').map((p) => p.netid.toLowerCase());
 ---
 
-<details class="pool" open={open} data-pool data-leads={leads.join(' ')}>
-  <summary>
-    <span class="label">Pool</span>
-    <span class="pool-count num" data-pool-count>{selected.length} of {participants.length} participants</span>
-  </summary>
-  <div class="pool-body">
-    <label class="field">
-      <span class="label">Paste netids</span>
-      <textarea class="input" name="netids" rows="3" placeholder="abc123, def456" data-netids>{netids}</textarea>
-      <span class="field-hint">One per line, or separated by commas. Replaces the checked list. Leads are skipped.</span>
+<fieldset class="pool" data-pool data-everyone={participants.length}>
+  <legend class="label">Who's in the shuffle</legend>
+  <div class="choices">
+    <label class="choice">
+      <input type="radio" name="pool_mode" value="all" checked={pool === 'all'} />
+      Everyone <span class="muted num">{participants.length} participants</span>
     </label>
-    <div class="pool-apply">
-      <button type="button" class="btn btn--secondary" data-apply hidden>Use these netids</button>
-      <p class="form-note" role="status" data-pool-note></p>
-    </div>
-    <div class="pool-tools">
-      <button type="button" class="link-btn" data-all hidden>Select all</button>
-      <button type="button" class="link-btn" data-none hidden>Clear</button>
-    </div>
-    <ul class="pool-list">
-      {
-        participants.map((p) => (
-          <li>
-            <label>
-              <input type="checkbox" name="pool" value={p.id} data-netid={p.netid.toLowerCase()} checked={selected.includes(p.id)} />
-              <span class="who">{p.name}</span> <span class="netid">{p.netid}</span>
-            </label>
-          </li>
-        ))
-      }
-    </ul>
+    <label class="choice">
+      <input type="radio" name="pool_mode" value="pick" checked={pool !== 'all'} />
+      Pick people
+    </label>
   </div>
-</details>
+  <div class="pick">
+    <PeoplePicker
+      people={participants}
+      selected={pool === 'all' ? [] : pool}
+      name="pool"
+      id={id}
+      label="People"
+      error={error}
+    />
+  </div>
+</fieldset>
 
 <script>
-  import { splitNetids } from '../lib/points-form';
-
   for (const pool of document.querySelectorAll<HTMLElement>('[data-pool]')) {
-    const boxes = [...pool.querySelectorAll<HTMLInputElement>('input[name="pool"]')];
-    const textarea = pool.querySelector<HTMLTextAreaElement>('[data-netids]')!;
-    const note = pool.querySelector<HTMLElement>('[data-pool-note]')!;
-    const count = pool.querySelector<HTMLElement>('[data-pool-count]')!;
-    const leads = new Set((pool.dataset.leads ?? '').split(' ').filter(Boolean));
-
+    const everyone = Number(pool.dataset.everyone);
+    const select = pool.querySelector<HTMLSelectElement>('[data-people-select]')!;
     const update = () => {
-      const n = boxes.filter((b) => b.checked).length;
-      count.textContent = `${n} of ${boxes.length} participants`;
-      pool.dispatchEvent(new CustomEvent('poolchange', { bubbles: true, detail: n }));
+      const all = pool.querySelector<HTMLInputElement>('input[name="pool_mode"]:checked')?.value !== 'pick';
+      const size = all ? everyone : select.selectedOptions.length;
+      pool.dispatchEvent(new CustomEvent('poolchange', { bubbles: true, detail: size }));
     };
-    const setAll = (checked: boolean) => {
-      for (const b of boxes) b.checked = checked;
-      update();
-    };
-
-    // With JavaScript, pasting fills the checkboxes so they can be adjusted.
-    // The textarea is cleared after, so the checkboxes are what's submitted.
-    for (const el of pool.querySelectorAll<HTMLElement>('[data-apply], [data-all], [data-none]')) el.hidden = false;
-    pool.querySelector('[data-all]')!.addEventListener('click', () => setAll(true));
-    pool.querySelector('[data-none]')!.addEventListener('click', () => setAll(false));
-    pool.addEventListener('change', (event) => {
-      if ((event.target as HTMLElement).matches('input[name="pool"]')) update();
-    });
-    pool.querySelector('[data-apply]')!.addEventListener('click', () => {
-      const known = new Map<string, HTMLInputElement | null>(boxes.map((b) => [b.dataset.netid!, b]));
-      for (const lead of leads) known.set(lead, null);
-      const { found, unknown } = splitNetids(textarea.value, known);
-      if (found.length === 0 && unknown.length === 0) {
-        note.textContent = 'Paste at least one netid.';
-        return;
-      }
-      if (unknown.length > 0) {
-        note.textContent = `Not active members: ${unknown.join(', ')}. Fix or remove them, then try again.`;
-        textarea.setAttribute('aria-invalid', 'true');
-        return;
-      }
-      for (const b of boxes) b.checked = found.includes(b);
-      const skipped = [...new Set(textarea.value.toLowerCase().split(/[\s,;]+/))].filter((n) => leads.has(n));
-      textarea.value = '';
-      textarea.removeAttribute('aria-invalid');
-      const picked = boxes.filter((b) => b.checked).length;
-      note.textContent = `Checked ${picked}.${skipped.length > 0 ? ` Skipped leads: ${skipped.join(', ')}.` : ''}`;
-      update();
-    });
+    pool.addEventListener('change', update);
+    pool.addEventListener('peoplechange', update);
   }
 </script>
 
 <style>
   .pool {
     display: grid;
-    gap: var(--space-4);
-  }
-  summary {
-    display: flex;
-    align-items: center;
     gap: var(--space-3);
-    min-height: 44px;
-    cursor: pointer;
-  }
-  .pool-count {
-    color: var(--color-text);
-    font-size: var(--text-small);
-    font-weight: 500;
-  }
-  .pool-body {
-    display: grid;
-    gap: var(--space-4);
-    padding-top: var(--space-2);
-  }
-  textarea {
-    resize: vertical;
-  }
-  .pool-apply {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .pool-tools {
-    display: flex;
-    gap: var(--space-4);
-  }
-  .link-btn {
-    background: none;
-    border: 0;
-    padding: 0;
-    min-height: 44px;
-    color: var(--color-text);
-    font: 500 var(--text-small) / 1.2 var(--font-sans);
-    cursor: pointer;
-  }
-  .link-btn:hover {
-    text-decoration: underline;
-    text-decoration-color: var(--color-accent);
-    text-underline-offset: 3px;
-  }
-  .link-btn[hidden],
-  [data-apply][hidden] {
-    display: none;
-  }
-  .pool-list {
-    list-style: none;
     margin: 0;
     padding: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    border: 0;
+    min-width: 0;
+  }
+  legend {
+    padding: 0;
+    margin-bottom: var(--space-2);
+  }
+  .choices {
+    display: flex;
+    flex-wrap: wrap;
     gap: 0 var(--space-5);
   }
-  .pool-list label {
+  .choice {
     display: flex;
     align-items: center;
     gap: var(--space-2);
     min-height: 44px;
+    color: var(--color-text);
     font-size: var(--text-small);
+    font-weight: 500;
     cursor: pointer;
   }
-  .pool-list input {
+  .choice input {
     width: 18px;
     height: 18px;
     margin: 0;
     accent-color: var(--color-accent);
-    flex: none;
   }
-  .who {
-    color: var(--color-text);
-    font-weight: 500;
-  }
-  .netid {
+  .muted {
     color: var(--color-text-muted);
+    font-weight: 400;
+  }
+  /* The picker shows only for "Pick people", with or without JavaScript. */
+  .pool:has(input[value='all']:checked) .pick {
+    display: none;
   }
 </style>

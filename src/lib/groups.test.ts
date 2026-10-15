@@ -72,21 +72,21 @@ test('parseGroupAction reads generate with a size from 2 to 8', () => {
   assert.deepEqual(parseGroupAction(form({ action: 'generate', size: ' 3 ' })), {
     action: 'generate',
     size: 3,
-    pool: { ids: [] },
+    pool: 'all',
   });
   assert.deepEqual(parseGroupAction(form({ action: 'generate', size: '1' })), { error: 'Group size must be from 2 to 8.' });
   assert.deepEqual(parseGroupAction(form({ action: 'generate', size: '9' })), { error: 'Group size must be from 2 to 8.' });
   assert.deepEqual(parseGroupAction(form({ action: 'generate', size: 'four' })), { error: 'Group size must be from 2 to 8.' });
 });
 
-test('parseGroupAction reads the pool from checkboxes, or from pasted netids first', () => {
+test('parseGroupAction reads the pool: everyone by default, or the people picked', () => {
   const f = form({ action: 'generate', size: '4' });
   f.append('pool', A.toUpperCase());
   f.append('pool', B);
   f.append('pool', 'nope');
-  assert.deepEqual(parseGroupAction(f), { action: 'generate', size: 4, pool: { ids: [A, B] } });
-  f.append('netids', ' AA1, bb2\ncc3 ');
-  assert.deepEqual(parseGroupAction(f), { action: 'generate', size: 4, pool: { netids: 'AA1, bb2\ncc3' } });
+  assert.deepEqual(parseGroupAction(f), { action: 'generate', size: 4, pool: 'all' });
+  f.append('pool_mode', 'pick');
+  assert.deepEqual(parseGroupAction(f), { action: 'generate', size: 4, pool: [A, B] });
 });
 
 test('parseGroupAction reads move to a group or to no group', () => {
@@ -186,15 +186,9 @@ test('groupsDoneMessage confirms each action from the redirect URL', () => {
   assert.equal(msg(''), null);
 });
 
-test('resolvePool skips leads and names netids that are not members', () => {
-  assert.deepEqual(resolvePool({ netids: 'AA1\ncc3' }, people), { ids: [A] });
-  assert.deepEqual(resolvePool({ netids: 'aa1, zz9' }, people), {
-    error: "zz9 isn't an active member. Check the spelling or take it out.",
-  });
-  assert.deepEqual(resolvePool({ netids: 'zz9 yy8' }, people), {
-    error: "These aren't active members: zz9, yy8. Check the spelling or take them out.",
-  });
-  assert.deepEqual(resolvePool({ netids: 'cc3' }, people), { error: 'The pool is empty. Add at least one participant.' });
-  assert.deepEqual(resolvePool({ ids: [B, C] }, people), { ids: [B] });
-  assert.deepEqual(resolvePool({ ids: [] }, people), { error: 'The pool is empty. Add at least one participant.' });
+test('resolvePool skips leads and unknown ids, and rejects an empty pool', () => {
+  assert.deepEqual(resolvePool('all', people), { ids: [A, B] });
+  assert.deepEqual(resolvePool([B, C, 'gone'], people), { ids: [B] });
+  assert.deepEqual(resolvePool([C], people), { error: 'Pick at least one person, or choose Everyone.' });
+  assert.deepEqual(resolvePool([], people), { error: 'Pick at least one person, or choose Everyone.' });
 });

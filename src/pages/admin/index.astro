@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import PeoplePicker from '../../components/PeoplePicker.astro';
 import PointsTable from '../../components/PointsTable.astro';
 import Toast from '../../components/Toast.astro';
 import { requireAdmin } from '../../lib/guards';
@@ -11,7 +12,6 @@ import {
   buttonLabel,
   correctionMax,
   correctionValues,
-  groupChoiceLabel,
   isUuid,
   matchingGroup,
   parseAwardForm,
@@ -154,47 +154,15 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
 
             <form method="post" class="form award-form" novalidate data-award-form>
               <input type="hidden" name="corrects" value={values.corrects} />
-              <div class="field">
-                <label class="label" for="participant" data-people-label>People</label>
-                <div class="chips" data-chips hidden />
-                <input
-                  class="input"
-                  id="people-search"
-                  type="search"
-                  list="people-list"
-                  placeholder="Name, NetID or group number"
-                  autocomplete="off"
-                  aria-describedby="people-hint"
-                  hidden
-                  data-people-search
-                />
-                <span class="field-hint" id="people-hint" role="status" hidden data-people-hint>
-                  To add many people, paste their NetIDs separated by spaces.
-                </span>
-                <datalist id="people-list">
-                  {people.map((p) => <option value={`${p.name} (${p.netid})`} />)}
-                  {groupChoices.map((g) => (
-                    <option value={groupChoiceLabel(g)} data-group={g.number} data-members={g.memberIds.join(',')} />
-                  ))}
-                </datalist>
-                <select
-                  class="input people-select"
-                  id="participant"
-                  name="participant"
-                  multiple
-                  size="8"
-                  aria-invalid={errors.people ? 'true' : undefined}
-                  aria-describedby={errors.people ? 'people-error' : undefined}
-                  data-people-select
-                >
-                  {people.map((p) => (
-                    <option value={p.id} selected={values.participantIds.includes(p.id)}>
-                      {`${p.name} (${p.netid})`}
-                    </option>
-                  ))}
-                </select>
-                {errors.people && <span class="form-error" id="people-error">{errors.people}</span>}
-              </div>
+              <PeoplePicker
+                people={people}
+                selected={values.participantIds}
+                name="participant"
+                id="participant"
+                label="People"
+                groups={groupChoices}
+                error={errors.people}
+              />
 
               <div class="row">
                 <label class="field">
@@ -273,62 +241,25 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
 </BaseLayout>
 
 <script>
-  import { buttonLabel, matchingGroup, peopleSummary, splitNetids } from '../../lib/points-form';
+  import { buttonLabel, matchingGroup, peopleSummary } from '../../lib/points-form';
 
-  // Turns the plain multi-select into a search box plus removable chips.
-  // Without JavaScript the multi-select still works on its own.
+  // Keeps the summary and button in step with the people picked and the amount.
   const form = document.querySelector<HTMLFormElement>('[data-award-form]');
   if (form) {
-    const select = form.querySelector<HTMLSelectElement>('[data-people-select]')!;
-    const search = form.querySelector<HTMLInputElement>('[data-people-search]')!;
-    const chips = form.querySelector<HTMLElement>('[data-chips]')!;
-    const label = form.querySelector<HTMLLabelElement>('[data-people-label]')!;
     const direction = form.querySelector<HTMLSelectElement>('[data-direction]')!;
     const pointsInput = form.querySelector<HTMLInputElement>('[data-points]')!;
     const summary = form.querySelector<HTMLElement>('[data-summary]')!;
     const submit = form.querySelector<HTMLButtonElement>('[data-submit]')!;
-    const hint = form.querySelector<HTMLElement>('[data-people-hint]')!;
-    const defaultHint = hint.textContent!.trim();
-
-    select.hidden = true;
-    search.hidden = false;
-    chips.hidden = false;
-    hint.hidden = false;
-    label.htmlFor = 'people-search';
-    if (select.getAttribute('aria-invalid')) search.setAttribute('aria-invalid', 'true');
-
-    const byLabel = new Map([...select.options].map((o) => [o.text, o]));
-    const byId = new Map([...select.options].map((o) => [o.value, o]));
-    // "Group 4 · …" suggestions pick every member at once.
-    const groupOptions = [...form.querySelectorAll<HTMLOptionElement>('option[data-group]')];
-    const groups = groupOptions.map((o) => ({
+    const select = form.querySelector<HTMLSelectElement>('[data-people-select]')!;
+    const groups = [...form.querySelectorAll<HTMLOptionElement>('option[data-group]')].map((o) => ({
       number: Number(o.dataset.group),
       memberIds: (o.dataset.members ?? '').split(','),
       names: [],
     }));
-    const groupByLabel = new Map(groupOptions.map((o, i) => [o.value, groups[i]]));
     const nameOf = (o: HTMLOptionElement) => o.text.replace(/ \([^)]*\)$/, '');
-    const byNetid = new Map(
-      [...select.options].map((o) => [(o.text.match(/\(([^)]*)\)$/)?.[1] ?? '').toLowerCase(), o]),
-    );
 
     const render = () => {
       const picked = [...select.selectedOptions];
-      chips.replaceChildren(
-        ...picked.map((option) => {
-          const chip = document.createElement('button');
-          chip.type = 'button';
-          chip.className = 'chip';
-          chip.textContent = `${nameOf(option)} ×`;
-          chip.setAttribute('aria-label', `Remove ${nameOf(option)}`);
-          chip.addEventListener('click', () => {
-            option.selected = false;
-            render();
-            search.focus();
-          });
-          return chip;
-        }),
-      );
       const n = Number(pointsInput.value.trim());
       const valid = /^\d{1,6}$/.test(pointsInput.value.trim()) && n >= 1 && n <= Number(pointsInput.dataset.max);
       const amount = valid ? (direction.value === 'remove' ? -n : n) : null;
@@ -340,54 +271,7 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
       submit.textContent = buttonLabel(picked.length);
     };
 
-    const pick = () => {
-      const group = groupByLabel.get(search.value);
-      if (group) {
-        for (const id of group.memberIds) {
-          const member = byId.get(id);
-          if (member) member.selected = true;
-        }
-        search.value = '';
-        render();
-        return true;
-      }
-      const option = byLabel.get(search.value);
-      if (!option) return false;
-      option.selected = true;
-      search.value = '';
-      render();
-      return true;
-    };
-
-    // "ab123 cd456 ef789" picks everyone listed. NetIDs that match nobody
-    // stay in the box so they can be fixed.
-    const pickNetids = (text: string) => {
-      const { found, unknown } = splitNetids(text, byNetid);
-      for (const option of found) option.selected = true;
-      search.value = unknown.join(' ');
-      hint.textContent = unknown.length
-        ? `No active participant with NetID ${unknown.join(', ')}. Check the spelling.`
-        : defaultHint;
-      render();
-    };
-    const isList = (text: string) => text.trim().split(/[\s,;]+/).length > 1;
-
-    search.addEventListener('input', () => {
-      if (pick()) hint.textContent = defaultHint;
-    });
-    search.addEventListener('paste', (event) => {
-      const text = event.clipboardData?.getData('text') ?? '';
-      if (!isList(text)) return;
-      event.preventDefault();
-      pickNetids(`${search.value} ${text}`);
-    });
-    search.addEventListener('keydown', (event) => {
-      // Enter picks a match instead of submitting half-filled.
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        if (!pick() && isList(search.value)) pickNetids(search.value);
-      }
-    });
+    form.addEventListener('peoplechange', render);
     direction.addEventListener('change', render);
     pointsInput.addEventListener('input', render);
     // A double-click can't send the form twice.
@@ -421,28 +305,6 @@ const signed = Number.isInteger(points) && points >= 1 && points <= maxPoints
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: var(--space-4);
-  }
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-  .chips:empty {
-    display: none;
-  }
-  .chips :global(.chip) {
-    min-height: 44px;
-    padding: 0 var(--space-3);
-    background: transparent;
-    border: 1px solid var(--color-slash);
-    border-radius: var(--radius);
-    color: var(--color-text);
-    font: 500 var(--text-small) / 1 var(--font-sans);
-    cursor: pointer;
-    transition: border-color 150ms ease-out;
-  }
-  .chips :global(.chip:hover) {
-    border-color: var(--color-text-secondary);
   }
   .summary {
     min-height: 1.5em;
