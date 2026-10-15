@@ -39,10 +39,9 @@ let loadError = false;
 let actionError = '';
 let size = String(DEFAULT_GROUP_SIZE);
 let toast: string | null = null;
-let pool: string[] = [];
-let pastedNetids = '';
-// What the pool editor showed when the form was sent, to put back after an error.
-let submitted: string[] | null = null;
+// Everyone, unless a lead picked people and the shuffle failed.
+let pool: string[] | 'all' = 'all';
+let poolError = '';
 
 if (!forbidden) {
   const { supabase } = gate;
@@ -62,20 +61,22 @@ if (!forbidden) {
   if (sprint && Astro.request.method === 'POST') {
     const form = await Astro.request.formData();
     let parsed = parseGroupAction(form);
+    let shuffle: string[] = [];
     if (!('error' in parsed) && parsed.action === 'generate') {
       size = String(parsed.size);
-      pastedNetids = typeof form.get('netids') === 'string' ? String(form.get('netids')) : '';
-      if ('ids' in parsed.pool) submitted = parsed.pool.ids;
+      pool = parsed.pool;
       const resolved = resolvePool(parsed.pool, people);
-      if ('error' in resolved) parsed = resolved;
-      else submitted = resolved.ids;
+      if ('error' in resolved) {
+        poolError = resolved.error;
+        parsed = resolved;
+      } else shuffle = resolved.ids;
     }
     if ('error' in parsed) {
       actionError = parsed.error;
     } else {
       const { data, error } =
         parsed.action === 'generate'
-          ? await supabase.rpc('generate_groups', { p_sprint: sprint.id, p_size: parsed.size, p_pool: submitted })
+          ? await supabase.rpc('generate_groups', { p_sprint: sprint.id, p_size: parsed.size, p_pool: shuffle })
           : parsed.action === 'move'
             ? await supabase.rpc('move_to_group', {
                 p_sprint: sprint.id,
@@ -103,8 +104,6 @@ if (!forbidden) {
   if (sprint) {
     const result = await loadGroups(supabase, sprint.id, people);
     ({ groups, unassigned } = result);
-    // The pool isn't saved: it starts as every participant each time.
-    pool = submitted ?? people.filter((p) => p.role === 'participant').map((p) => p.id);
     loadError ||= result.error;
     if (Astro.request.method === 'GET') toast = groupsDoneMessage(Astro.url.searchParams, people);
   }
@@ -118,6 +117,7 @@ const reshuffleSize = Math.min(
   MAX_GROUP_SIZE,
   Math.max(MIN_GROUP_SIZE, ...groups.map((g) => g.members.length)),
 );
+const poolSize = pool === 'all' ? people.filter((p) => p.role === 'participant').length : pool.length;
 const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_SIZE ? Number(size) : DEFAULT_GROUP_SIZE;
 ---
 
@@ -180,9 +180,9 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
                   data-size
                 />
               </label>
-              <PoolEditor people={people} selected={pool} netids={pastedNetids} open />
-              <p class="preview num" aria-live="polite" data-preview>
-                {sizePreview(pool.length, previewSize)}
+              <PoolEditor people={people} pool={pool} id="pool" error={poolError} />
+              <p class="preview num" aria-live="polite" data-preview data-pool-size={poolSize}>
+                {sizePreview(poolSize, previewSize)}
               </p>
               <div>
                 <button type="submit" class="btn btn--primary">Generate groups</button>
@@ -262,9 +262,9 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
                     </label>
                     <button type="submit" class="btn btn--secondary">Reshuffle</button>
                     <div class="reshuffle-pool">
-                      <PoolEditor people={people} selected={pool} netids={pastedNetids} open={pastedNetids !== '' || submitted !== null} />
-                      <p class="preview num" aria-live="polite" data-preview>
-                        {sizePreview(pool.length, reshuffleSize)}
+                      <PoolEditor people={people} pool={pool} id="reshuffle-pool" error={poolError} />
+                      <p class="preview num" aria-live="polite" data-preview data-pool-size={poolSize}>
+                        {sizePreview(poolSize, reshuffleSize)}
                       </p>
                     </div>
                   </form>
@@ -307,8 +307,8 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
     const sizeInput = form.querySelector<HTMLInputElement>('[data-size]');
     const preview = form.querySelector<HTMLElement>('[data-preview]');
     if (!sizeInput || !preview) continue;
+    let pooled = Number(preview.dataset.poolSize);
     const render = () => {
-      const pooled = form.querySelectorAll('input[name="pool"]:checked').length;
       const n = Number(sizeInput.value);
       preview.textContent =
         Number.isInteger(n) && n >= MIN_GROUP_SIZE && n <= MAX_GROUP_SIZE
@@ -316,7 +316,10 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
           : `Group size must be from ${MIN_GROUP_SIZE} to ${MAX_GROUP_SIZE}.`;
     };
     sizeInput.addEventListener('input', render);
-    form.addEventListener('poolchange', render);
+    form.addEventListener('poolchange', (event) => {
+      pooled = (event as CustomEvent<number>).detail;
+      render();
+    });
   }
 </script>
 
@@ -352,9 +355,8 @@ const previewSize = Number(size) >= MIN_GROUP_SIZE && Number(size) <= MAX_GROUP_
   .status {
     color: var(--color-text-muted);
   }
-  /* Room for the pool checklist; the size field stays narrow. */
   .generate {
-    max-width: none;
+    max-width: 560px;
   }
   .generate .field:has([data-size]) {
     max-width: 120px;

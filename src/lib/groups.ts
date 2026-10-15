@@ -2,7 +2,7 @@
 // on /admin/groups, and arranging groups for display. Pure functions, so they
 // run under `npm test` without Astro.
 
-import { isUuid, splitNetids } from './points-form.ts';
+import { isUuid } from './points-form.ts';
 
 export const MIN_GROUP_SIZE = 2;
 export const MAX_GROUP_SIZE = 8;
@@ -33,8 +33,8 @@ export interface Group {
 }
 
 export type GroupAction =
-  /** Pasted netids win over the checked boxes, so a paste works without JavaScript. */
-  | { action: 'generate'; size: number; pool: { netids: string } | { ids: string[] } }
+  /** pool is every participant, or the ids a lead picked. */
+  | { action: 'generate'; size: number; pool: 'all' | string[] }
   /** groupNumber 'new' starts a new group; null takes them out of their group. */
   | { action: 'move'; participantId: string; groupNumber: number | 'new' | null }
   | { action: 'publish' };
@@ -96,10 +96,9 @@ export function parseGroupAction(form: FormData): GroupAction | { error: string 
       if (!(size >= MIN_GROUP_SIZE && size <= MAX_GROUP_SIZE)) {
         return { error: `Group size must be from ${MIN_GROUP_SIZE} to ${MAX_GROUP_SIZE}.` };
       }
-      const netids = text(form, 'netids');
-      if (netids) return { action: 'generate', size, pool: { netids } };
+      if (text(form, 'pool_mode') !== 'pick') return { action: 'generate', size, pool: 'all' };
       const ids = form.getAll('pool').filter((v): v is string => typeof v === 'string' && isUuid(v));
-      return { action: 'generate', size, pool: { ids: [...new Set(ids.map((v) => v.toLowerCase()))] } };
+      return { action: 'generate', size, pool: [...new Set(ids.map((v) => v.toLowerCase()))] };
     }
     case 'move': {
       const participantId = text(form, 'participant');
@@ -117,31 +116,12 @@ export function parseGroupAction(form: FormData): GroupAction | { error: string 
   }
 }
 
-/**
- * The participant ids to shuffle. Leads are skipped. A netid that isn't an
- * active member is an error, so a typo doesn't quietly leave someone out.
- */
-export function resolvePool(
-  pool: { netids: string } | { ids: string[] },
-  people: Person[],
-): { ids: string[] } | { error: string } {
-  const participants = people.filter((p) => p.role === 'participant');
-  if ('ids' in pool) {
-    const ids = participants.filter((p) => pool.ids.includes(p.id)).map((p) => p.id);
-    return ids.length > 0 ? { ids } : { error: 'The pool is empty. Add at least one participant.' };
-  }
-  const { found, unknown } = splitNetids(pool.netids, new Map(people.map((p) => [p.netid.toLowerCase(), p])));
-  if (unknown.length > 0) {
-    const list = unknown.join(', ');
-    return {
-      error:
-        unknown.length === 1
-          ? `${list} isn't an active member. Check the spelling or take it out.`
-          : `These aren't active members: ${list}. Check the spelling or take them out.`,
-    };
-  }
-  const ids = found.filter((p) => p.role === 'participant').map((p) => p.id);
-  return ids.length > 0 ? { ids } : { error: 'The pool is empty. Add at least one participant.' };
+/** The participant ids to shuffle. Leads and unknown ids are skipped. */
+export function resolvePool(pool: 'all' | string[], people: Person[]): { ids: string[] } | { error: string } {
+  const ids = people
+    .filter((p) => p.role === 'participant' && (pool === 'all' || pool.includes(p.id)))
+    .map((p) => p.id);
+  return ids.length > 0 ? { ids } : { error: 'Pick at least one person, or choose Everyone.' };
 }
 
 /**
