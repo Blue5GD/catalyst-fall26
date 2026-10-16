@@ -1,7 +1,6 @@
 ---
 title: Sprint 2 Session 1
 date: 2026-10-13
-pin: true
 ---
 
 10/13 @ 6pm, WLH 114, see you there! This sprint we're building AI agents.
