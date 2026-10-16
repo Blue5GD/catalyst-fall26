@@ -1,0 +1,63 @@
+---
+// "Your group" on the home page. Rendered per request as a server island
+// (server:defer), so the page itself stays static. Shows nothing when signed
+// out, with no database, or before this sprint's groups are published.
+import { loadGroups, loadSprints } from '../lib/groups-data';
+import { currentSprint, groupOf, todayInNewHaven, type Group } from '../lib/groups';
+
+const { user, supabase } = Astro.locals;
+let group: Group | null = null;
+
+if (user && supabase) {
+  const { sprints } = await loadSprints(supabase);
+  const sprint = currentSprint(sprints, todayInNewHaven());
+  if (sprint?.groups_published_at) {
+    group = groupOf((await loadGroups(supabase, sprint.id)).groups, user.id);
+  }
+}
+const others = group?.members.filter((m) => m.id !== user?.id) ?? [];
+---
+
+{
+  group && (
+    <section class="group-row" aria-label="Your group">
+      <span class="label">Your group</span>
+      <span class="group-num num">Group {group.number}</span>
+      <span class="group-names">{others.length > 0 ? `With ${others.map((m) => m.name).join(', ')}` : 'Just you so far'}</span>
+      <a class="group-link" href="/group">See group</a>
+    </section>
+  )
+}
+
+<style>
+  .group-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2) var(--space-5);
+    margin-top: var(--space-7);
+    padding-block: var(--space-4);
+    border-block: var(--line);
+  }
+  .group-row .label {
+    color: var(--color-text-muted);
+  }
+  .group-num {
+    color: var(--color-text);
+    font-size: var(--text-subheading);
+    font-weight: 500;
+  }
+  .group-names {
+    flex: 1 1 240px;
+    min-width: 0;
+    font-size: 15px;
+  }
+  .group-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin-block: calc(-1 * var(--space-3));
+    font-size: var(--text-small);
+    font-weight: 500;
+  }
+</style>
