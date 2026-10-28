@@ -96,8 +96,14 @@ if (!forbidden) {
         return Astro.redirect(`/admin/groups?sprint=${sprint.slug}&${done}`, 303);
       }
       console.error(`${parsed.action} failed:`, error);
-      // P0001 is a message the database wrote for people. Anything else isn't.
-      actionError = error.code === 'P0001' ? error.message : "Couldn't save that. Nothing changed. Try again in a minute.";
+      // P0001 is a message the database wrote for people. PGRST202 means the
+      // database is behind the site: a migration hasn't been applied yet.
+      actionError =
+        error.code === 'P0001'
+          ? error.message
+          : error.code === 'PGRST202'
+            ? 'The database is missing an update this page needs. A lead needs to run npx supabase db push (see docs/LEADS.md). Nothing changed.'
+            : "Couldn't save that. Nothing changed. Try again in a minute.";
     }
   }
 
