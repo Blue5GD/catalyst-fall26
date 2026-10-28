@@ -7,8 +7,8 @@ import {
   groupOf,
   groupSizes,
   groupsDoneMessage,
-  lateSignUps,
   parseGroupAction,
+  resolvePool,
   sizePreview,
   sprintNumber,
   todayInNewHaven,
@@ -65,14 +65,28 @@ test('sizePreview describes the groups the shuffle will make', () => {
   assert.equal(sizePreview(27, 4), '27 participants → 7 groups: six of 4, one of 3.');
   assert.equal(sizePreview(8, 4), '8 participants → 2 groups: two of 4.');
   assert.equal(sizePreview(1, 4), '1 participant → 1 group: one of 1.');
-  assert.equal(sizePreview(0, 4), 'No participants to group yet.');
+  assert.equal(sizePreview(0, 4), 'The pool is empty. Add at least one participant.');
 });
 
 test('parseGroupAction reads generate with a size from 2 to 8', () => {
-  assert.deepEqual(parseGroupAction(form({ action: 'generate', size: ' 3 ' })), { action: 'generate', size: 3 });
+  assert.deepEqual(parseGroupAction(form({ action: 'generate', size: ' 3 ' })), {
+    action: 'generate',
+    size: 3,
+    pool: 'all',
+  });
   assert.deepEqual(parseGroupAction(form({ action: 'generate', size: '1' })), { error: 'Group size must be from 2 to 8.' });
   assert.deepEqual(parseGroupAction(form({ action: 'generate', size: '9' })), { error: 'Group size must be from 2 to 8.' });
   assert.deepEqual(parseGroupAction(form({ action: 'generate', size: 'four' })), { error: 'Group size must be from 2 to 8.' });
+});
+
+test('parseGroupAction reads the pool: everyone by default, or the people picked', () => {
+  const f = form({ action: 'generate', size: '4' });
+  f.append('pool', A.toUpperCase());
+  f.append('pool', B);
+  f.append('pool', 'nope');
+  assert.deepEqual(parseGroupAction(f), { action: 'generate', size: 4, pool: 'all' });
+  f.append('pool_mode', 'pick');
+  assert.deepEqual(parseGroupAction(f), { action: 'generate', size: 4, pool: [A, B] });
 });
 
 test('parseGroupAction reads move to a group or to no group', () => {
@@ -172,8 +186,9 @@ test('groupsDoneMessage confirms each action from the redirect URL', () => {
   assert.equal(msg(''), null);
 });
 
-test('lateSignUps counts unassigned participants, not leads', () => {
-  // Leads aren't shuffled in, so counting them would keep the warning on forever.
-  assert.equal(lateSignUps(people), 2);
-  assert.equal(lateSignUps(people.filter((p) => p.role === 'admin')), 0);
+test('resolvePool skips leads and unknown ids, and rejects an empty pool', () => {
+  assert.deepEqual(resolvePool('all', people), { ids: [A, B] });
+  assert.deepEqual(resolvePool([B, C, 'gone'], people), { ids: [B] });
+  assert.deepEqual(resolvePool([C], people), { error: 'Pick at least one person, or choose Everyone.' });
+  assert.deepEqual(resolvePool([], people), { error: 'Pick at least one person, or choose Everyone.' });
 });

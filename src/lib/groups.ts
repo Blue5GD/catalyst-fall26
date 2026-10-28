@@ -33,7 +33,8 @@ export interface Group {
 }
 
 export type GroupAction =
-  | { action: 'generate'; size: number }
+  /** pool is every participant, or the ids a lead picked. */
+  | { action: 'generate'; size: number; pool: 'all' | string[] }
   /** groupNumber 'new' starts a new group; null takes them out of their group. */
   | { action: 'move'; participantId: string; groupNumber: number | 'new' | null }
   | { action: 'publish' };
@@ -71,7 +72,7 @@ const word = (n: number) => WORDS[n] ?? String(n);
 
 /** "27 participants → 7 groups: six of 4, one of 3." */
 export function sizePreview(n: number, size: number): string {
-  if (n <= 0) return 'No participants to group yet.';
+  if (n <= 0) return 'The pool is empty. Add at least one participant.';
   const sizes = groupSizes(n, size);
   const counts = new Map<number, number>();
   for (const s of sizes) counts.set(s, (counts.get(s) ?? 0) + 1);
@@ -95,7 +96,9 @@ export function parseGroupAction(form: FormData): GroupAction | { error: string 
       if (!(size >= MIN_GROUP_SIZE && size <= MAX_GROUP_SIZE)) {
         return { error: `Group size must be from ${MIN_GROUP_SIZE} to ${MAX_GROUP_SIZE}.` };
       }
-      return { action: 'generate', size };
+      if (text(form, 'pool_mode') !== 'pick') return { action: 'generate', size, pool: 'all' };
+      const ids = form.getAll('pool').filter((v): v is string => typeof v === 'string' && isUuid(v));
+      return { action: 'generate', size, pool: [...new Set(ids.map((v) => v.toLowerCase()))] };
     }
     case 'move': {
       const participantId = text(form, 'participant');
@@ -111,6 +114,14 @@ export function parseGroupAction(form: FormData): GroupAction | { error: string 
     default:
       return { error: "That action isn't recognized. Reload the page and try again." };
   }
+}
+
+/** The participant ids to shuffle. Leads and unknown ids are skipped. */
+export function resolvePool(pool: 'all' | string[], people: Person[]): { ids: string[] } | { error: string } {
+  const ids = people
+    .filter((p) => p.role === 'participant' && (pool === 'all' || pool.includes(p.id)))
+    .map((p) => p.id);
+  return ids.length > 0 ? { ids } : { error: 'Pick at least one person, or choose Everyone.' };
 }
 
 /**
@@ -136,11 +147,6 @@ export function arrangeGroups(
         .sort((a, b) => a.name.localeCompare(b.name)),
     }));
   return { groups: arranged, unassigned: people.filter((p) => !placed.has(p.id)) };
-}
-
-/** Participants in no group: late sign-ups. Leads are left out; they aren't shuffled in. */
-export function lateSignUps(unassigned: Person[]): number {
-  return unassigned.filter((p) => p.role === 'participant').length;
 }
 
 export function groupOf(groups: Group[], participantId: string): Group | null {

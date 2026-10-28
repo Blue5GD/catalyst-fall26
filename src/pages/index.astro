@@ -1,23 +1,38 @@
 ---
-import { getCollection, render } from 'astro:content';
+import { getCollection, getEntry, render } from 'astro:content';
 import BaseLayout from '../layouts/BaseLayout.astro';
+import GroupRow from '../components/GroupRow.astro';
+import { currentSprint, todayInNewHaven } from '../lib/groups';
 
 const sprints = [
-  { title: 'Personal website', dates: 'Sep 28 – Oct 11' },
-  { title: 'AI agent', dates: 'Oct 12 – Oct 25' },
-  { title: 'Board-game bot tournament', dates: 'Nov 2 – Nov 15' },
-  { title: 'Final project: free build', dates: 'Nov 16 – Dec 6' },
-  { title: 'Demo Day', dates: 'Dec 7 – 13' },
+  { title: 'Personal website', dates: 'Sep 28 – Oct 11', starts_on: '2026-09-28' },
+  { title: 'AI agent', dates: 'Oct 12 – Oct 25', starts_on: '2026-10-12' },
+  { title: 'Board-game bot tournament', dates: 'Nov 2 – Nov 15', starts_on: '2026-11-02' },
+  { title: 'Final project: free build', dates: 'Nov 16 – Dec 6', starts_on: '2026-11-16' },
+  { title: 'Demo Day', dates: 'Dec 7 – 13', starts_on: '2026-12-07' },
 ];
+// The page is built ahead of time, so "now" is the sprint running when the
+// site last deployed. Any merge to main redeploys it.
+const current = currentSprint(sprints, todayInNewHaven())!;
+const currentIndex = sprints.indexOf(current);
 
-// Updates from happening-now/*.md, newest first.
+// Updates from happening-now/*.md. Pinned posts first, then newest first.
+// The first one is shown in full; the rest fold into "Earlier".
 const updates = await Promise.all(
   (await getCollection('now'))
-    .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())
+    .sort((a, b) => {
+      const pin = Number(Boolean(b.data.pin)) - Number(Boolean(a.data.pin));
+      return pin || b.data.date.getTime() - a.data.date.getTime();
+    })
     .map(async (entry) => ({ ...entry, Content: (await render(entry)).Content })),
 );
+const [latest, ...earlier] = updates;
+const week = await getEntry('week', 'this-week');
+const Week = week ? (await render(week)).Content : null;
+
 const formatDate = (date: Date) =>
   date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+const isoDate = (date: Date) => date.toISOString().slice(0, 10);
 ---
 
 <BaseLayout title="Catalyst">
@@ -25,50 +40,82 @@ const formatDate = (date: Date) =>
     <div class="slash" aria-hidden="true"></div>
     <div>
       <h1>Catalyst</h1>
-      <p class="label hero-label">Fall 2026 · y/cs</p>
-      <p class="hero-intro">The Catalyst homepage. Check here for project, personal, and leaderboard updates.</p>
-      <p class="hero-links">
-        <a href="/members">See the members</a>
-        <a href="/leaderboard">Check the leaderboard</a>
+      <p class="label hero-label">Fall 2026 · Sprint {currentIndex + 1} of {sprints.length}</p>
+      <p class="hero-sprint">
+        {current.title} <span class="num">· {current.dates}</span>
       </p>
+      <div class="track" aria-hidden="true">
+        {sprints.map((_, i) => <i class:list={{ done: i < currentIndex, now: i === currentIndex }} />)}
+      </div>
     </div>
   </section>
 
-  <section class="agenda" aria-labelledby="agenda-title">
-    <h3 id="agenda-title">Sprints</h3>
-    <ol>
-      {
-        sprints.map((sprint, i) => (
-          <li>
-            <span class="agenda-num num">{String(i + 1).padStart(2, '0')}</span>
-            <span class="agenda-title">{sprint.title}</span>
-            <span class="agenda-dates num">{sprint.dates}</span>
-          </li>
-        ))
-      }
-    </ol>
-  </section>
+  <GroupRow server:defer />
 
-  {
-    updates.length > 0 && (
-      <section class="now" aria-labelledby="now-title">
-        <h3 id="now-title">Happening now</h3>
-        {updates.map(({ data, Content }) => (
-          <article class="now-item">
-            <div class="now-head">
-              <h4>{data.title}</h4>
-              <time class="now-date num" datetime={data.date.toISOString().slice(0, 10)}>
-                {formatDate(data.date)}
-              </time>
+  <div class="cols">
+    {
+      latest && (
+        <section class="now" aria-labelledby="now-title">
+          <h2 id="now-title">Happening now</h2>
+          <article class="post">
+            <div class="post-head">
+              <h3>{latest.data.title}</h3>
+              <time class="date num" datetime={isoDate(latest.data.date)}>{formatDate(latest.data.date)}</time>
             </div>
             <div class="prose">
-              <Content />
+              <latest.Content />
             </div>
           </article>
-        ))}
+
+          {earlier.length > 0 && (
+            <div class="earlier">
+              <p class="label earlier-label">Earlier</p>
+              {earlier.map(({ data, Content }) => (
+                <details>
+                  <summary>
+                    <span>{data.title}</span>
+                    <time class="date num" datetime={isoDate(data.date)}>{formatDate(data.date)}</time>
+                  </summary>
+                  <div class="prose">
+                    <Content />
+                  </div>
+                </details>
+              ))}
+            </div>
+          )}
+        </section>
+      )
+    }
+
+    <aside class="rail">
+      {
+        Week && (
+          <section class="rail-block week" aria-labelledby="week-title">
+            <h2 class="label" id="week-title">This week</h2>
+            <Week />
+          </section>
+        )
+      }
+
+      <section class="rail-block sprints-block" aria-labelledby="sprints-title">
+        <h2 class="label" id="sprints-title">Sprints</h2>
+        <ol class="sprints">
+          {
+            sprints.map((sprint, i) => (
+              <li class:list={{ past: i < currentIndex, current: i === currentIndex }}>
+                <span class="sprint-num num">{String(i + 1).padStart(2, '0')}</span>
+                <span class="sprint-title">{sprint.title}</span>
+                <span class="sprint-dates num">
+                  {sprint.dates}
+                  {i === currentIndex && ' · Now'}
+                </span>
+              </li>
+            ))
+          }
+        </ol>
       </section>
-    )
-  }
+    </aside>
+  </div>
 </BaseLayout>
 
 <style>
@@ -80,67 +127,175 @@ const formatDate = (date: Date) =>
   .hero-label {
     margin-top: var(--space-4);
   }
-  .hero-intro {
+  .hero-sprint {
     margin-top: var(--space-5);
-  }
-  .hero-links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-5);
-    margin-top: var(--space-5);
-    font-weight: 500;
-  }
-  .hero-links a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-  }
-
-  .agenda {
-    margin-top: var(--space-8);
-  }
-  .agenda ol {
-    list-style: none;
-    margin: var(--space-4) 0 0;
-    padding: 0;
-  }
-  .agenda li {
-    display: grid;
-    grid-template-columns: 64px 1fr auto;
-    gap: var(--space-4);
-    align-items: baseline;
-    padding-block: var(--space-4);
-    border-bottom: var(--line);
-  }
-  .agenda-num {
-    color: var(--color-text-muted);
-  }
-  .agenda-title {
     color: var(--color-text);
+    font-size: var(--text-subheading);
     font-weight: 500;
   }
-  .agenda-dates {
+  .hero-sprint span {
     color: var(--color-text-muted);
-    font-size: var(--text-small);
+    font-weight: 400;
+  }
+  .track {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--space-1);
+    max-width: 360px;
+    margin-top: var(--space-4);
+  }
+  .track i {
+    height: 2px;
+    background: var(--color-slash);
+  }
+  .track i.done {
+    background: var(--color-text-secondary);
+  }
+  .track i.now {
+    background: var(--color-accent);
   }
 
-  .now {
-    margin-top: var(--space-8);
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: var(--space-8);
+    margin-top: var(--space-7);
   }
-  .now-item {
-    padding-block: var(--space-5);
-    border-bottom: var(--line);
+  .now h2 {
+    font-size: var(--text-heading);
+    font-weight: 700;
+    line-height: 1.2;
   }
-  .now-head {
+  .post {
+    padding-top: var(--space-5);
+  }
+  .post-head {
     display: flex;
-    flex-wrap: wrap;
     justify-content: space-between;
     align-items: baseline;
-    gap: var(--space-2) var(--space-4);
+    gap: var(--space-4);
   }
-  .now-date {
+  .date {
     color: var(--color-text-muted);
     font-size: var(--text-caption);
+    white-space: nowrap;
+  }
+
+  .earlier {
+    margin-top: var(--space-7);
+  }
+  .earlier-label {
+    padding-bottom: var(--space-3);
+    border-bottom: var(--line);
+    color: var(--color-text-muted);
+  }
+  details {
+    border-bottom: var(--line);
+  }
+  summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 16px;
+    gap: var(--space-4);
+    align-items: baseline;
+    min-height: 44px;
+    padding-block: var(--space-3);
+    list-style: none;
+    color: var(--color-text);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 150ms ease-out;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+  summary::after {
+    content: '+';
+    color: var(--color-text-muted);
+    text-align: right;
+  }
+  details[open] summary::after {
+    content: '−';
+  }
+  summary:hover {
+    color: var(--color-text-secondary);
+  }
+  details .prose {
+    margin: 0 0 var(--space-4);
+  }
+
+  .rail {
+    display: grid;
+    align-content: start;
+    gap: var(--space-7);
+  }
+  .rail-block {
+    display: grid;
+    gap: var(--space-3);
+  }
+  .rail-block h2 {
+    color: var(--color-text-muted);
+  }
+  /* happening-now/this-week.md: "- **Title** detail" becomes a hairline row. */
+  .week :global(ul) {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: var(--line);
+  }
+  .week :global(li) {
+    padding-block: var(--space-3);
+    border-bottom: var(--line);
+    font-size: 13px;
+    color: var(--color-text-muted);
+  }
+  .week :global(strong) {
+    display: block;
+    color: var(--color-text);
+    font-size: 15px;
+    font-weight: 500;
+  }
+
+  .sprints {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: var(--line);
+  }
+  .sprints li {
+    position: relative;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    column-gap: var(--space-3);
+    padding-block: var(--space-3);
+    border-bottom: var(--line);
+  }
+  .sprint-num {
+    grid-row: 1 / span 2;
+    padding-top: 1px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+  }
+  .sprint-title {
+    color: var(--color-text);
+    font-size: 15px;
+    font-weight: 500;
+  }
+  .sprint-dates {
+    color: var(--color-text-muted);
+    font-size: 13px;
+  }
+  .sprints .past .sprint-title {
+    color: var(--color-text-muted);
+  }
+  .sprints .current::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: var(--space-3);
+    bottom: var(--space-3);
+    width: 2px;
+    background: var(--color-accent);
   }
 
   /* Markdown from happening-now/. */
@@ -172,23 +327,27 @@ const formatDate = (date: Date) =>
     color: var(--color-text);
   }
 
-  @media (max-width: 720px) {
-    .now {
-      margin-top: var(--space-7);
+  @media (max-width: 860px) {
+    .cols {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-7);
     }
+    /* On phones: this week first, then updates, then sprints. */
+    .rail {
+      display: contents;
+    }
+    .week {
+      order: -1;
+    }
+  }
+  @media (max-width: 720px) {
     .hero {
       flex-direction: column;
       align-items: flex-start;
       gap: var(--space-5);
     }
-    .agenda {
-      margin-top: var(--space-7);
-    }
-    .agenda li {
-      grid-template-columns: 44px 1fr;
-    }
-    .agenda-dates {
-      grid-column: 2;
+    .cols {
+      margin-top: var(--space-6);
     }
   }
 </style>

@@ -1,0 +1,189 @@
+---
+// Pick people by name, or paste NetIDs: each match becomes a removable chip.
+// Used for awarding points and for the group pool. Without JavaScript it's a
+// plain multi-select. Fires `peoplechange` on the picker whenever the
+// picked people change.
+import { groupChoiceLabel, type GroupChoice } from '../lib/points-form';
+
+interface Props {
+  people: { id: string; netid: string; name: string }[];
+  selected: string[];
+  /** The select's form name. */
+  name: string;
+  /** Prefix for element ids, so two pickers can share a page. */
+  id: string;
+  label: string;
+  /** Published groups, so a whole group can be picked from the suggestions. */
+  groups?: GroupChoice[];
+  error?: string;
+}
+
+const { people, selected, name, id, label, groups = [], error } = Astro.props;
+---
+
+<div class="field picker" data-people-picker>
+  <label class="label" for={id} data-people-label>{label}</label>
+  <div class="chips" data-chips hidden></div>
+  <input
+    class="input"
+    id={`${id}-search`}
+    type="search"
+    list={`${id}-list`}
+    placeholder={groups.length > 0 ? 'Name, NetID or group number' : 'Name or NetID'}
+    autocomplete="off"
+    aria-describedby={`${id}-hint`}
+    hidden
+    data-people-search
+  />
+  <span class="field-hint" id={`${id}-hint`} role="status" hidden data-people-hint>
+    To add many people, paste their NetIDs separated by spaces.
+  </span>
+  <datalist id={`${id}-list`}>
+    {people.map((p) => <option value={`${p.name} (${p.netid})`} />)}
+    {groups.map((g) => (
+      <option value={groupChoiceLabel(g)} data-group={g.number} data-members={g.memberIds.join(',')} />
+    ))}
+  </datalist>
+  <select
+    class="input people-select"
+    id={id}
+    name={name}
+    multiple
+    size="8"
+    aria-invalid={error ? 'true' : undefined}
+    aria-describedby={error ? `${id}-error` : undefined}
+    data-people-select
+  >
+    {people.map((p) => (
+      <option value={p.id} selected={selected.includes(p.id)}>
+        {`${p.name} (${p.netid})`}
+      </option>
+    ))}
+  </select>
+  {error && <span class="form-error" id={`${id}-error`}>{error}</span>}
+</div>
+
+<script>
+  import { splitNetids } from '../lib/points-form';
+
+  // Turns the plain multi-select into a search box plus removable chips.
+  for (const picker of document.querySelectorAll<HTMLElement>('[data-people-picker]')) {
+    const select = picker.querySelector<HTMLSelectElement>('[data-people-select]')!;
+    const search = picker.querySelector<HTMLInputElement>('[data-people-search]')!;
+    const chips = picker.querySelector<HTMLElement>('[data-chips]')!;
+    const label = picker.querySelector<HTMLLabelElement>('[data-people-label]')!;
+    const hint = picker.querySelector<HTMLElement>('[data-people-hint]')!;
+    const defaultHint = hint.textContent!.trim();
+
+    select.hidden = true;
+    search.hidden = false;
+    chips.hidden = false;
+    hint.hidden = false;
+    label.htmlFor = search.id;
+    if (select.getAttribute('aria-invalid')) search.setAttribute('aria-invalid', 'true');
+
+    const byLabel = new Map([...select.options].map((o) => [o.text, o]));
+    const byId = new Map([...select.options].map((o) => [o.value, o]));
+    // "Group 4 · …" suggestions pick every member at once.
+    const groupByLabel = new Map(
+      [...picker.querySelectorAll<HTMLOptionElement>('option[data-group]')].map((o) => [
+        o.value,
+        (o.dataset.members ?? '').split(','),
+      ]),
+    );
+    const nameOf = (o: HTMLOptionElement) => o.text.replace(/ \([^)]*\)$/, '');
+    const byNetid = new Map(
+      [...select.options].map((o) => [(o.text.match(/\(([^)]*)\)$/)?.[1] ?? '').toLowerCase(), o]),
+    );
+
+    const render = () => {
+      const picked = [...select.selectedOptions];
+      chips.replaceChildren(
+        ...picked.map((option) => {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'chip';
+          chip.textContent = `${nameOf(option)} ×`;
+          chip.setAttribute('aria-label', `Remove ${nameOf(option)}`);
+          chip.addEventListener('click', () => {
+            option.selected = false;
+            render();
+            search.focus();
+          });
+          return chip;
+        }),
+      );
+      const detail = { ids: picked.map((o) => o.value), names: picked.map(nameOf) };
+      picker.dispatchEvent(new CustomEvent('peoplechange', { bubbles: true, detail }));
+    };
+
+    const pick = () => {
+      const members = groupByLabel.get(search.value);
+      const options = members
+        ? members.map((id) => byId.get(id)).filter((o) => o !== undefined)
+        : [byLabel.get(search.value)].filter((o) => o !== undefined);
+      if (options.length === 0) return false;
+      for (const option of options) option.selected = true;
+      search.value = '';
+      render();
+      return true;
+    };
+
+    // "ab123 cd456 ef789" picks everyone listed. NetIDs that match nobody
+    // stay in the box so they can be fixed.
+    const pickNetids = (text: string) => {
+      const { found, unknown } = splitNetids(text, byNetid);
+      for (const option of found) option.selected = true;
+      search.value = unknown.join(' ');
+      hint.textContent = unknown.length
+        ? `No active participant with NetID ${unknown.join(', ')}. Check the spelling.`
+        : defaultHint;
+      render();
+    };
+    const isList = (text: string) => text.trim().split(/[\s,;]+/).length > 1;
+
+    search.addEventListener('input', () => {
+      if (pick()) hint.textContent = defaultHint;
+    });
+    search.addEventListener('paste', (event) => {
+      const text = event.clipboardData?.getData('text') ?? '';
+      if (!isList(text)) return;
+      event.preventDefault();
+      pickNetids(`${search.value} ${text}`);
+    });
+    search.addEventListener('keydown', (event) => {
+      // Enter picks a match instead of submitting half-filled.
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        if (!pick() && isList(search.value)) pickNetids(search.value);
+      }
+    });
+
+    render();
+  }
+</script>
+
+<style>
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .chips:empty {
+    display: none;
+  }
+  .chips :global(.chip) {
+    min-height: 44px;
+    padding: 0 var(--space-3);
+    background: transparent;
+    border: 1px solid var(--color-slash);
+    border-radius: var(--radius);
+    color: var(--color-text);
+    font: 500 var(--text-small) / 1 var(--font-sans);
+    cursor: pointer;
+    transition: border-color 150ms ease-out;
+  }
+  .chips :global(.chip:hover) {
+    border-color: var(--color-text-secondary);
+  }
+</style>

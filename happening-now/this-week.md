@@ -1,0 +1,2 @@
+- **Agent project** Due Fri, Oct 30
+- **Office hours** Tue–Thu, 4–5pm at Tsai City

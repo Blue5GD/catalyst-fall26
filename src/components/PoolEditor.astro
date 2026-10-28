@@ -1,0 +1,101 @@
+---
+// Who gets shuffled on /admin/groups: everyone, or people picked the same
+// way as for points. Goes inside the generate or reshuffle form. Fires
+// `poolchange` with the pool size whenever it changes.
+import PeoplePicker from './PeoplePicker.astro';
+import type { Person } from '../lib/groups';
+
+interface Props {
+  people: Person[];
+  /** Picked participant ids, or 'all'. */
+  pool: string[] | 'all';
+  /** Prefix for element ids. */
+  id: string;
+  error?: string;
+}
+
+const { people, pool, id, error } = Astro.props;
+const participants = people.filter((p) => p.role === 'participant');
+---
+
+<fieldset class="pool" data-pool data-everyone={participants.length}>
+  <legend class="label">Who's in the shuffle</legend>
+  <div class="choices">
+    <label class="choice">
+      <input type="radio" name="pool_mode" value="all" checked={pool === 'all'} />
+      Everyone <span class="muted num">{participants.length} participants</span>
+    </label>
+    <label class="choice">
+      <input type="radio" name="pool_mode" value="pick" checked={pool !== 'all'} />
+      Pick people
+    </label>
+  </div>
+  <div class="pick">
+    <PeoplePicker
+      people={participants}
+      selected={pool === 'all' ? [] : pool}
+      name="pool"
+      id={id}
+      label="People"
+      error={error}
+    />
+  </div>
+</fieldset>
+
+<script>
+  for (const pool of document.querySelectorAll<HTMLElement>('[data-pool]')) {
+    const everyone = Number(pool.dataset.everyone);
+    const select = pool.querySelector<HTMLSelectElement>('[data-people-select]')!;
+    const update = () => {
+      const all = pool.querySelector<HTMLInputElement>('input[name="pool_mode"]:checked')?.value !== 'pick';
+      const size = all ? everyone : select.selectedOptions.length;
+      pool.dispatchEvent(new CustomEvent('poolchange', { bubbles: true, detail: size }));
+    };
+    pool.addEventListener('change', update);
+    pool.addEventListener('peoplechange', update);
+  }
+</script>
+
+<style>
+  .pool {
+    display: grid;
+    gap: var(--space-3);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+  legend {
+    padding: 0;
+    margin-bottom: var(--space-2);
+  }
+  .choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-5);
+  }
+  .choice {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 44px;
+    color: var(--color-text);
+    font-size: var(--text-small);
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .choice input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--color-accent);
+  }
+  .muted {
+    color: var(--color-text-muted);
+    font-weight: 400;
+  }
+  /* The picker shows only for "Pick people", with or without JavaScript. */
+  .pool:has(input[value='all']:checked) .pick {
+    display: none;
+  }
+</style>
