@@ -19,6 +19,7 @@ export interface Member {
   bio: string;
   github?: string;
   website?: string;
+  agent?: string;
   role?: 'Lead' | 'Instructor';
   photo?: ImageMetadata;
 }

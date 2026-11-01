@@ -92,7 +92,8 @@ You should see `Switched to a new branch 'add-ab123'`.
      "name": "Alex Bell",
      "bio": "Sophomore in CS. I like building tools for musicians.",
      "github": "alexbell",
-     "website": "https://alexbell.dev"
+     "website": "https://alexbell.dev",
+     "agent": "https://github.com/alexbell/study-buddy-agent"
    }
    ```
 
@@ -102,9 +103,10 @@ You should see `Switched to a new branch 'add-ab123'`.
    | `bio` | Yes | One line, 120 characters max |
    | `github` | No | Just your username, not a link |
    | `website` | No | A full link starting with `https://` |
+   | `agent` | No | A link to your Project 2 AI agent, starting with `https://`. Its GitHub repo works. |
    | `role` | **Don't add** | Only for leads and instructors. Leave it out, or a lead will ask you to remove it before merging. |
 
-   Don't have a website yet? Delete that line. You'll build one in Project 1. If you delete the last line, also delete the comma at the end of the line above it. JSON doesn't allow a trailing comma.
+   Don't have a website or agent yet? Delete those lines. You'll build them in Projects 1 and 2. If you delete the last line, also delete the comma at the end of the line above it. JSON doesn't allow a trailing comma.
 
 3. Add your photo to the `members/` folder as `ab123.jpg` (or `ab123.png`):
    - A clear photo of your face, centered. It's cropped to a square.
@@ -165,4 +167,17 @@ Once a lead merges your PR, you'll be on the members page within a few minutes. 
 
 ## Changing or removing your profile
 
-To change your profile, make a new branch, edit your files, and open another PR. To remove it, open a PR that deletes your two files, or ask a lead to do it for you.
+To change your profile, make a new branch, edit your files, and open another PR.
+
+For example, to show your AI agent, add an `"agent"` line with its link as the last line. Add a comma to the end of the line above it, but not to the new line:
+
+```json
+{
+  "name": "Alex Bell",
+  "bio": "Sophomore in CS. I like building tools for musicians.",
+  "github": "alexbell",
+  "agent": "https://github.com/alexbell/study-buddy-agent"
+}
+```
+
+To remove your profile, open a PR that deletes your two files, or ask a lead to do it for you.

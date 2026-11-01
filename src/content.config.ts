@@ -9,6 +9,8 @@ const notPlaceholder = (placeholder: string) => [
 ] as const;
 const oneLine = [(value: string) => !/[\r\n]/.test(value), { error: 'Must be one line.' }] as const;
 const notBlank = [(value: string) => value.trim().length > 0, { error: 'Required.' }] as const;
+// Only web links. A javascript: link here would run on the members page.
+const link = () => z.url({ protocol: /^https?$/, error: 'Must be a full link starting with https:// (or http://)' });
 
 // One file per participant: members/<netid>.json, with the photo next to it
 // as members/<netid>.jpg (or .png). Files starting with "_" are templates.
@@ -29,11 +31,9 @@ const members = defineCollection({
       .regex(/^[A-Za-z0-9-]{1,39}$/)
       .refine(...notPlaceholder('your-github-username'))
       .optional(),
-    // Only web links. A javascript: link here would run on the members page.
-    website: z
-      .url({ protocol: /^https?$/, error: 'Must be a full link starting with https://' })
-      .refine(...notPlaceholder('https://your-site.com'))
-      .optional(),
+    website: link().refine(...notPlaceholder('https://your-site.com')).optional(),
+    // A link to the participant's Project 2 AI agent.
+    agent: link().optional(),
     // Set by leads only. Participants leave it out.
     role: z.enum(['Lead', 'Instructor']).optional(),
   }),
