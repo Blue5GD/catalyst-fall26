@@ -29,10 +29,11 @@ const members = await getMembers();
               <h4>{member.name}</h4>
               {member.role && <p class="label role">{member.role}</p>}
               <p class="bio">{member.bio}</p>
-              {(member.github || member.website) && (
+              {(member.github || member.website || member.agent) && (
                 <p class="links">
                   {member.github && <a href={`https://github.com/${member.github}`}>GitHub</a>}
                   {member.website && <a href={member.website}>Website</a>}
+                  {member.agent && <a href={member.agent}>AI agent</a>}
                 </p>
               )}
             </li>
@@ -85,7 +86,8 @@ const members = await getMembers();
   }
   .links {
     display: flex;
-    gap: var(--space-4);
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-4);
     margin-top: var(--space-2);
     font-size: var(--text-small);
     font-weight: 500;

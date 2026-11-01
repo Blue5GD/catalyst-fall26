@@ -34,6 +34,11 @@ const members = defineCollection({
       .url({ protocol: /^https?$/, error: 'Must be a full link starting with https://' })
       .refine(...notPlaceholder('https://your-site.com'))
       .optional(),
+    // A link to the participant's Project 2 AI agent.
+    agent: z
+      .url({ protocol: /^https?$/, error: 'Must be a full link starting with https://' })
+      .refine(...notPlaceholder('https://your-agent.com'))
+      .optional(),
     // Set by leads only. Participants leave it out.
     role: z.enum(['Lead', 'Instructor']).optional(),
   }),

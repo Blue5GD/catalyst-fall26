@@ -13,7 +13,7 @@ const GITHUB = /^[A-Za-z0-9-]{1,39}$/;
 const PHOTO_EXTS = ['.jpg', '.jpeg', '.png'];
 const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 const MIN_PHOTO_SIZE = 400;
-const ALLOWED_FIELDS = ['name', 'bio', 'github', 'website', 'role'];
+const ALLOWED_FIELDS = ['name', 'bio', 'github', 'website', 'agent', 'role'];
 const ROLES = ['Lead', 'Instructor'];
 const IGNORED = new Set(['_template.json', 'README.md', '.gitkeep']);
 // Values from _template.json. A profile still using them wasn't filled in.
@@ -22,6 +22,7 @@ const PLACEHOLDERS = {
   bio: 'One line about you, 120 characters max.',
   github: 'your-github-username',
   website: 'https://your-site.com',
+  agent: 'https://your-agent.com',
 };
 
 const errors = [];
@@ -98,12 +99,13 @@ for (const [netid, file] of profiles) {
       githubOwners.set(key, netid);
     }
   }
-  if (data.website !== undefined) {
+  for (const key of ['website', 'agent']) {
+    if (data[key] === undefined) continue;
     let ok = false;
     try {
-      ok = ['https:', 'http:'].includes(new URL(data.website).protocol);
+      ok = ['https:', 'http:'].includes(new URL(data[key]).protocol);
     } catch {}
-    if (!ok) fail(file, '"website" must be a full link starting with https://');
+    if (!ok) fail(file, `"${key}" must be a full link starting with https://`);
   }
 
   if (data.role !== undefined && !ROLES.includes(data.role)) {
