@@ -22,7 +22,6 @@ const PLACEHOLDERS = {
   bio: 'One line about you, 120 characters max.',
   github: 'your-github-username',
   website: 'https://your-site.com',
-  agent: 'https://your-agent.com',
 };
 
 const errors = [];
@@ -105,7 +104,7 @@ for (const [netid, file] of profiles) {
     try {
       ok = ['https:', 'http:'].includes(new URL(data[key]).protocol);
     } catch {}
-    if (!ok) fail(file, `"${key}" must be a full link starting with https://`);
+    if (!ok) fail(file, `"${key}" must be a full link starting with https:// (or http://)`);
   }
 
   if (data.role !== undefined && !ROLES.includes(data.role)) {

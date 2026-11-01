@@ -167,4 +167,17 @@ Once a lead merges your PR, you'll be on the members page within a few minutes. 
 
 ## Changing or removing your profile
 
-To change your profile, make a new branch, edit your files, and open another PR. For example, to show your AI agent, add an `"agent"` line with its link. Put a comma at the end of the line above it. To remove your profile, open a PR that deletes your two files, or ask a lead to do it for you.
+To change your profile, make a new branch, edit your files, and open another PR.
+
+For example, to show your AI agent, add an `"agent"` line with its link as the last line. Add a comma to the end of the line above it, but not to the new line:
+
+```json
+{
+  "name": "Alex Bell",
+  "bio": "Sophomore in CS. I like building tools for musicians.",
+  "github": "alexbell",
+  "agent": "https://github.com/alexbell/study-buddy-agent"
+}
+```
+
+To remove your profile, open a PR that deletes your two files, or ask a lead to do it for you.

@@ -31,9 +31,9 @@ const members = await getMembers();
               <p class="bio">{member.bio}</p>
               {(member.github || member.website || member.agent) && (
                 <p class="links">
-                  {member.github && <a href={`https://github.com/${member.github}`}>GitHub</a>}
-                  {member.website && <a href={member.website}>Website</a>}
-                  {member.agent && <a href={member.agent}>AI agent</a>}
+                  {member.github && <a href={`https://github.com/${member.github}`} aria-label={`${member.name} on GitHub`}>GitHub</a>}
+                  {member.website && <a href={member.website} aria-label={`${member.name}'s website`}>Website</a>}
+                  {member.agent && <a href={member.agent} aria-label={`${member.name}'s AI agent`}>AI agent</a>}
                 </p>
               )}
             </li>
